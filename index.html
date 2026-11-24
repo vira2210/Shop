@@ -61,6 +61,23 @@
       animation: scanLaser 2.2s ease-in-out infinite;
     }
 
+    /* Animasi Splash Screen Vee's Shop */
+    @keyframes splashPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    @keyframes splashProgress {
+      0% { width: 8%; }
+      65% { width: 78%; }
+      100% { width: 100%; }
+    }
+    .splash-logo-anim {
+      animation: splashPulse 1.8s ease-in-out infinite;
+    }
+    .splash-progress-bar {
+      animation: splashProgress 1.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
     /* Custom Scrollbar */
     ::-webkit-scrollbar {
       width: 6px;
@@ -122,6 +139,24 @@
   </style>
 </head>
 <body class="antialiased selection:bg-gold-400 selection:text-navy-900">
+
+  <!-- ==================== 0. SPLASH SCREEN ==================== -->
+  <div id="splash-screen" class="fixed inset-0 z-[110] flex flex-col items-center justify-center bg-gradient-to-br from-navy-700 via-navy-600 to-navy-900 text-white px-6 transition-opacity duration-500">
+    <div class="absolute -top-24 -right-24 w-72 h-72 bg-gold-500/20 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-24 -left-24 w-72 h-72 bg-gold-400/15 rounded-full blur-3xl pointer-events-none"></div>
+
+    <div class="relative z-10 flex flex-col items-center text-center max-w-xs w-full">
+      <div id="splash-store-logo-box" class="splash-logo-anim w-28 h-28 rounded-full bg-white p-1.5 shadow-2xl border-4 border-gold-500 flex items-center justify-center overflow-hidden mb-4"></div>
+      <h1 id="splash-store-name" class="text-2xl sm:text-3xl font-black tracking-tight text-white">Vee's Shop</h1>
+      <p id="splash-store-slogan" class="text-gold-400 text-xs sm:text-sm font-bold mt-1">Bright Choice for Daily Needs</p>
+
+      <!-- Progress Bar Loading -->
+      <div class="w-full h-1.5 bg-white/15 rounded-full overflow-hidden mt-7">
+        <div class="splash-progress-bar h-full bg-gradient-to-r from-gold-400 to-gold-500 rounded-full"></div>
+      </div>
+      <p class="text-[11px] font-semibold text-white/75 mt-2.5">Memuat aplikasi...</p>
+    </div>
+  </div>
 
   <!-- ==================== TOAST NOTIFICATION CONTAINER ==================== -->
   <div id="toast-container" class="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-xs w-full pointer-events-none"></div>
@@ -319,185 +354,192 @@
   </div>
 
   <!-- ==================== 3. APLIKASI UTAMA (POS & DASHBOARD) ==================== -->
-  <div id="view-app" class="hidden min-h-screen flex flex-col lg:flex-row">
+  <div id="view-app" class="hidden min-h-screen flex flex-col">
     
-    <!-- Sidebar Desktop / Top Header Mobile -->
-    <aside class="bg-navy-600 text-white border-b lg:border-b-0 lg:border-r border-navy-800 lg:w-64 lg:fixed lg:inset-y-0 z-30 flex flex-col justify-between shadow-xl">
-      <div>
-        <!-- Brand Header -->
-        <div class="p-4 lg:p-5 flex items-center justify-between lg:justify-start gap-3 border-b border-white/10">
-          <div class="flex items-center gap-3 min-w-0">
-            <div id="nav-store-logo-box" class="w-11 h-11 rounded-full bg-white p-0.5 border-2 border-gold-500 flex items-center justify-center overflow-hidden shrink-0"></div>
-            <div class="overflow-hidden">
-              <h1 id="nav-store-name" class="font-black text-white text-base truncate">Vee's Shop</h1>
+    <!-- Top Brand Header (Fixed / Sticky di Atas) -->
+    <header class="bg-navy-600 text-white border-b border-navy-800 sticky top-0 z-30 shadow-md">
+      <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+        <!-- Brand Identity -->
+        <div class="flex items-center gap-3 min-w-0">
+          <div id="nav-store-logo-box" class="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white p-0.5 border-2 border-gold-500 flex items-center justify-center overflow-hidden shrink-0"></div>
+          <div class="overflow-hidden">
+            <h1 id="nav-store-name" class="font-black text-white text-sm sm:text-base truncate">Vee's Shop</h1>
+            <div class="flex items-center gap-2 mt-0.5">
               <span id="nav-role-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-gold-400 text-navy-900">
                 OWNER
               </span>
+              <span id="nav-user-name" class="text-[11px] font-bold text-navy-100 truncate">vee3yah</span>
             </div>
           </div>
-          <!-- Mobile Quick Actions -->
-          <div class="flex lg:hidden items-center gap-1.5">
-            <button onclick="openPublicCatalog()" title="Pratinjau Katalog Pelanggan" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-gold-400 flex items-center justify-center" id="mob-catalog-btn"></button>
-            <button onclick="handleLogout()" title="Logout" class="w-9 h-9 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 flex items-center justify-center" id="mob-logout-btn"></button>
-          </div>
         </div>
 
-        <!-- Navigation Menu -->
-        <nav class="p-2 lg:p-3.5 grid grid-cols-4 lg:grid-cols-1 gap-1.5">
-          <button onclick="switchTab('kasir')" id="tab-btn-kasir" title="Menu Kasir" class="nav-tab-btn flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-1 lg:gap-3 px-3 py-2.5 lg:py-3 rounded-xl text-xs lg:text-sm font-bold transition">
-            <span id="nav-icon-kasir"></span>
-            <span>Kasir</span>
-          </button>
-          <button onclick="switchTab('barang')" id="tab-btn-barang" title="Menu Barang & Stok" class="nav-tab-btn flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-1 lg:gap-3 px-3 py-2.5 lg:py-3 rounded-xl text-xs lg:text-sm font-bold transition">
-            <span id="nav-icon-barang"></span>
-            <span>Barang</span>
-          </button>
-          <button onclick="switchTab('keuangan')" id="tab-btn-keuangan" title="Menu Keuangan & Hutang" class="nav-tab-btn flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-1 lg:gap-3 px-3 py-2.5 lg:py-3 rounded-xl text-xs lg:text-sm font-bold transition">
-            <span id="nav-icon-keuangan"></span>
-            <span>Keuangan</span>
-          </button>
-          <button onclick="switchTab('pengaturan')" id="tab-btn-pengaturan" title="Menu Pengaturan" class="nav-tab-btn flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-1 lg:gap-3 px-3 py-2.5 lg:py-3 rounded-xl text-xs lg:text-sm font-bold transition">
-            <span id="nav-icon-pengaturan"></span>
-            <span>Pengaturan</span>
-          </button>
-        </nav>
-      </div>
-
-      <!-- Footer User Profile Desktop -->
-      <div class="hidden lg:block p-4 border-t border-white/10 bg-navy-800/70">
-        <div class="flex items-center gap-3 mb-3">
-          <div class="w-9 h-9 rounded-full bg-gold-400 text-navy-900 flex items-center justify-center font-black text-sm shrink-0" id="nav-user-avatar">V</div>
-          <div class="overflow-hidden">
-            <p id="nav-user-name" class="text-xs font-bold text-white truncate">vee3yah</p>
-            <p id="nav-user-wa" class="text-[11px] text-navy-200 truncate">081554894469</p>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <button onclick="openPublicCatalog()" title="Pratinjau Halaman Katalog Share" class="py-2 px-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+        <!-- Header Quick Actions -->
+        <div class="flex items-center gap-2 shrink-0">
+          <button onclick="openPublicCatalog()" title="Pratinjau Halaman Katalog Share" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition flex items-center gap-1.5">
             <span id="desk-catalog-icon" class="text-gold-400"></span>
-            <span>Katalog</span>
+            <span class="hidden sm:inline">Katalog</span>
           </button>
-          <button onclick="handleLogout()" title="Keluar dari Akun" class="py-2 px-2.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+          <button onclick="handleLogout()" title="Keluar dari Akun" class="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 text-xs font-bold transition flex items-center gap-1.5">
             <span id="desk-logout-icon"></span>
-            <span>Logout</span>
+            <span class="hidden sm:inline">Logout</span>
           </button>
         </div>
       </div>
-    </aside>
+    </header>
 
-    <!-- Main Content Area -->
-    <main class="flex-1 lg:pl-64 min-h-screen">
+    <!-- Fixed Bottom Navigation Bar (Tidak Ikut Ter-Scroll) -->
+    <nav class="fixed bottom-0 inset-x-0 z-40 bg-navy-600/95 backdrop-blur-md text-white border-t-2 border-gold-500/70 shadow-[0_-6px_24px_rgba(0,13,38,0.25)] no-print">
+      <div class="max-w-3xl mx-auto px-2 py-1.5 grid grid-cols-4 gap-1.5">
+        <button onclick="switchTab('kasir')" id="tab-btn-kasir" title="Menu Kasir" class="nav-tab-btn flex flex-col items-center justify-center gap-1 py-2 px-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition">
+          <span id="nav-icon-kasir"></span>
+          <span>Kasir</span>
+        </button>
+        <button onclick="switchTab('barang')" id="tab-btn-barang" title="Menu Barang & Stok" class="nav-tab-btn flex flex-col items-center justify-center gap-1 py-2 px-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition">
+          <span id="nav-icon-barang"></span>
+          <span>Barang</span>
+        </button>
+        <button onclick="switchTab('keuangan')" id="tab-btn-keuangan" title="Menu Keuangan & Hutang" class="nav-tab-btn flex flex-col items-center justify-center gap-1 py-2 px-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition">
+          <span id="nav-icon-keuangan"></span>
+          <span>Keuangan</span>
+        </button>
+        <button onclick="switchTab('pengaturan')" id="tab-btn-pengaturan" title="Menu Pengaturan" class="nav-tab-btn flex flex-col items-center justify-center gap-1 py-2 px-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition">
+          <span id="nav-icon-pengaturan"></span>
+          <span>Pengaturan</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Main Content Area (Dengan Padding Bawah agar Tidak Tertutup Bottom Menu) -->
+    <main class="flex-1 pb-36 min-h-screen">
       
       <!-- ==================== MENU 1: KASIR (POS) ==================== -->
-      <section id="section-kasir" class="p-4 lg:p-6 max-w-[1600px] mx-auto">
-        <div class="flex flex-col xl:flex-row gap-6">
-          
-          <!-- Kiri: Pencarian, Barcode & Katalog Produk -->
-          <div class="flex-1 min-w-0">
-            <!-- Header & Search Barcode -->
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 mb-5">
+      <section id="section-kasir" class="p-4 lg:p-6 max-w-7xl mx-auto">
+        <!-- Pencarian, Barcode & Katalog Produk (Full Width) -->
+        <div class="w-full">
+          <!-- Header & Search Barcode -->
+          <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 mb-5">
+            <div class="flex items-center gap-2.5">
+              <div class="relative flex-1">
+                <span id="pos-barcode-icon" class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-navy-600"></span>
+                <input type="text" id="pos-search-input" onkeyup="handlePosSearchKeyup(event)" placeholder="Cari nama produk, kategori, atau scan barcode + Enter..." class="w-full pl-11 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-navy-600 focus:bg-white transition">
+                <button onclick="clearPosSearch()" id="pos-clear-search" title="Bersihkan Pencarian" class="hidden absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"></button>
+              </div>
+              <button onclick="openCameraScanner('POS')" title="Scan Barcode dengan Kamera HP/Laptop" class="px-3.5 h-12 bg-navy-600 hover:bg-navy-700 text-gold-400 rounded-xl flex items-center justify-center gap-2 shrink-0 transition shadow-sm font-extrabold text-xs">
+                <span id="pos-camera-btn-icon"></span>
+                <span class="hidden sm:inline">Scan Product</span>
+              </button>
+              <button onclick="openBarcodeSimulatorModal()" title="Simulasi Scan Barcode Cepat" class="w-12 h-12 bg-gold-100 hover:bg-gold-200 text-navy-800 border border-gold-400/60 rounded-xl flex items-center justify-center shrink-0 transition shadow-sm" id="pos-scan-btn"></button>
+            </div>
+
+            <!-- Filter Kategori Cepat -->
+            <div id="pos-category-pills" class="flex items-center gap-2 overflow-x-auto pt-3 mt-3 border-t border-slate-100 pb-1"></div>
+          </div>
+
+          <!-- Grid Katalog Produk -->
+          <div id="pos-product-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5"></div>
+        </div>
+
+        <!-- Floating Cart Pill Bar (Mengambang di atas Bottom Navigation) -->
+        <div id="pos-floating-cart-bar" onclick="openPosCartDrawer()" class="fixed bottom-[4.75rem] inset-x-4 max-w-2xl mx-auto z-30 bg-navy-600 hover:bg-navy-700 text-white rounded-2xl p-3 sm:p-3.5 shadow-[0_10px_30px_rgba(0,13,38,0.35)] border-2 border-gold-500 flex items-center justify-between gap-3 cursor-pointer transition transform active:scale-[0.99] no-print">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="relative w-11 h-11 rounded-xl bg-gold-400 text-navy-900 flex items-center justify-center shrink-0 shadow-sm">
+              <span id="pos-float-cart-icon"></span>
+              <span id="pos-float-badge" class="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center shadow">0</span>
+            </div>
+            <div class="min-w-0">
+              <p id="pos-float-subtitle" class="text-[11px] font-bold text-gold-400 truncate">Keranjang Belanja (0 item)</p>
+              <p id="pos-float-total" class="text-base sm:text-lg font-black text-white leading-tight">Rp. 0</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="px-3.5 py-2 rounded-xl bg-gold-400 text-navy-900 text-xs font-black shadow-sm flex items-center gap-1.5">
+              <span>Lihat & Bayar</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Floating Drawer / Modal Keranjang & Pembayaran -->
+        <div id="pos-cart-drawer" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-slate-950/65 backdrop-blur-sm sm:p-4">
+          <div class="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom duration-200">
+            <!-- Header Keranjang Mengambang -->
+            <div class="p-4 bg-navy-600 text-white flex items-center justify-between shrink-0">
               <div class="flex items-center gap-2.5">
-                <div class="relative flex-1">
-                  <span id="pos-barcode-icon" class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-navy-600"></span>
-                  <input type="text" id="pos-search-input" onkeyup="handlePosSearchKeyup(event)" placeholder="Cari nama produk, kategori, atau scan barcode + Enter..." class="w-full pl-11 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-navy-600 focus:bg-white transition">
-                  <button onclick="clearPosSearch()" id="pos-clear-search" title="Bersihkan Pencarian" class="hidden absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"></button>
+                <div id="pos-cart-header-icon" class="w-9 h-9 rounded-xl bg-gold-400 text-navy-900 flex items-center justify-center"></div>
+                <div>
+                  <h2 class="font-extrabold text-white text-sm">Keranjang Belanja</h2>
+                  <p class="text-[11px] text-gold-400 font-semibold" id="pos-cart-subtitle">0 item dipilih</p>
                 </div>
-                <button onclick="openCameraScanner('POS')" title="Scan Barcode dengan Kamera HP/Laptop" class="px-3.5 h-12 bg-navy-600 hover:bg-navy-700 text-gold-400 rounded-xl flex items-center justify-center gap-2 shrink-0 transition shadow-sm font-extrabold text-xs">
-                  <span id="pos-camera-btn-icon"></span>
-                  <span class="hidden sm:inline">Scan Product</span>
-                </button>
-                <button onclick="openBarcodeSimulatorModal()" title="Simulasi Scan Barcode Cepat" class="w-12 h-12 bg-gold-100 hover:bg-gold-200 text-navy-800 border border-gold-400/60 rounded-xl flex items-center justify-center shrink-0 transition shadow-sm" id="pos-scan-btn"></button>
               </div>
-
-              <!-- Filter Kategori Cepat -->
-              <div id="pos-category-pills" class="flex items-center gap-2 overflow-x-auto pt-3 mt-3 border-t border-slate-100 pb-1"></div>
-            </div>
-
-            <!-- Grid Katalog Produk -->
-            <div id="pos-product-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-3 2xl:grid-cols-4 gap-3.5"></div>
-          </div>
-
-          <!-- Kanan: Keranjang & Checkout -->
-          <div class="w-full xl:w-[420px] shrink-0">
-            <div class="bg-white rounded-2xl shadow-md border border-slate-200/90 flex flex-col sticky top-5 max-h-[calc(100vh-2.5rem)]">
-              <!-- Header Keranjang -->
-              <div class="p-4 border-b border-slate-100 flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                  <div id="pos-cart-header-icon" class="w-9 h-9 rounded-xl bg-navy-600 text-gold-400 flex items-center justify-center"></div>
-                  <div>
-                    <h2 class="font-extrabold text-navy-600 text-sm">Keranjang Belanja</h2>
-                    <p class="text-[11px] text-slate-500" id="pos-cart-subtitle">0 item dipilih</p>
-                  </div>
-                </div>
-                <button onclick="clearPosCart()" title="Kosongkan Keranjang" class="w-8 h-8 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition" id="pos-clear-cart-btn"></button>
-              </div>
-
-              <!-- List Item Keranjang -->
-              <div id="pos-cart-items" class="flex-1 overflow-y-auto p-4 space-y-3 min-h-[180px]"></div>
-
-              <!-- Panel Pembayaran & Checkout -->
-              <div class="p-4 bg-slate-50 border-t border-slate-200/80 rounded-b-2xl space-y-3.5">
-                <!-- Total Belanja -->
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Total Belanja</span>
-                  <span id="pos-total-display" class="text-2xl font-black text-navy-600">Rp. 0</span>
-                </div>
-
-                <!-- Metode & Status Pembayaran -->
-                <div class="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label class="block text-[11px] font-bold text-slate-600 mb-1">Metode Bayar</label>
-                    <select id="pos-payment-method" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-navy-600">
-                      <option value="Offline">Offline (Tunai)</option>
-                      <option value="Online">Online (Transfer/QRIS)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="block text-[11px] font-bold text-slate-600 mb-1">Status Bayar</label>
-                    <select id="pos-payment-status" onchange="togglePosDebtFields()" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-navy-600">
-                      <option value="Lunas">Lunas</option>
-                      <option value="Hutang">Hutang</option>
-                    </select>
-                  </div>
-                </div>
-
-                <!-- Input Data Pelanggan (Muncul jika Hutang) -->
-                <div id="pos-debt-fields" class="hidden p-3 bg-gold-50 border border-gold-400 rounded-xl space-y-2">
-                  <p class="text-[11px] font-extrabold text-navy-800">Data Pelanggan Hutang</p>
-                  <input type="text" id="pos-debt-name" placeholder="Nama Pelanggan *" class="w-full px-3 py-2 bg-white border border-gold-200 rounded-lg text-xs">
-                  <input type="tel" id="pos-debt-wa" placeholder="No. WhatsApp Pelanggan" class="w-full px-3 py-2 bg-white border border-gold-200 rounded-lg text-xs">
-                </div>
-
-                <!-- Input Uang Diterima & Kembalian -->
-                <div class="grid grid-cols-2 gap-2.5 items-end">
-                  <div>
-                    <label class="block text-[11px] font-bold text-slate-600 mb-1">Uang Diterima (Rp)</label>
-                    <input type="number" id="pos-cash-received" oninput="calculatePosChange()" placeholder="0" min="0" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-navy-600">
-                  </div>
-                  <div class="bg-white px-3 py-2 rounded-xl border border-slate-200">
-                    <span class="block text-[10px] font-bold text-slate-400">Kembalian</span>
-                    <span id="pos-change-display" class="text-sm font-black text-emerald-600">Rp. 0</span>
-                  </div>
-                </div>
-
-                <!-- Tombol Nominal Cepat -->
-                <div class="flex gap-1.5 overflow-x-auto pb-0.5">
-                  <button type="button" onclick="setExactCash()" title="Uang Pas" class="px-2.5 py-1 bg-gold-100 hover:bg-gold-200 text-navy-800 rounded-lg text-[11px] font-extrabold shrink-0">Uang Pas</button>
-                  <button type="button" onclick="addCashQuick(10000)" class="px-2.5 py-1 bg-white border border-slate-200 hover:border-navy-600 rounded-lg text-[11px] font-bold text-slate-700 shrink-0">+10rb</button>
-                  <button type="button" onclick="addCashQuick(20000)" class="px-2.5 py-1 bg-white border border-slate-200 hover:border-navy-600 rounded-lg text-[11px] font-bold text-slate-700 shrink-0">+20rb</button>
-                  <button type="button" onclick="addCashQuick(50000)" class="px-2.5 py-1 bg-white border border-slate-200 hover:border-navy-600 rounded-lg text-[11px] font-bold text-slate-700 shrink-0">+50rb</button>
-                  <button type="button" onclick="addCashQuick(100000)" class="px-2.5 py-1 bg-white border border-slate-200 hover:border-navy-600 rounded-lg text-[11px] font-bold text-slate-700 shrink-0">+100rb</button>
-                </div>
-
-                <!-- Tombol Proses Checkout -->
-                <button onclick="processCheckout()" class="w-full py-3.5 bg-navy-600 hover:bg-navy-700 text-white font-extrabold rounded-xl shadow-lg shadow-navy-600/25 transition flex items-center justify-center gap-2 text-sm">
-                  <span id="pos-checkout-icon" class="text-gold-400"></span>
-                  <span>Bayar</span>
-                </button>
+              <div class="flex items-center gap-2">
+                <button onclick="clearPosCart()" title="Kosongkan Keranjang" class="w-8 h-8 rounded-xl bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 flex items-center justify-center transition" id="pos-clear-cart-btn"></button>
+                <button onclick="closePosCartDrawer()" title="Tutup Keranjang" class="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition" id="pos-close-drawer-btn"></button>
               </div>
             </div>
-          </div>
 
+            <!-- List Item Keranjang -->
+            <div id="pos-cart-items" class="flex-1 overflow-y-auto p-4 space-y-2.5 min-h-[150px]"></div>
+
+            <!-- Panel Pembayaran & Checkout -->
+            <div class="p-4 bg-slate-50 border-t border-slate-200/80 space-y-3 shrink-0">
+              <!-- Total Belanja -->
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-extrabold text-slate-600 uppercase tracking-wider">Total Belanja</span>
+                <span id="pos-total-display" class="text-2xl font-black text-navy-600">Rp. 0</span>
+              </div>
+
+              <!-- Metode & Status Pembayaran -->
+              <div class="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-600 mb-1">Metode Bayar</label>
+                  <select id="pos-payment-method" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-navy-600">
+                    <option value="Offline">Offline (Tunai)</option>
+                    <option value="Online">Online (Transfer/QRIS)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-600 mb-1">Status Bayar</label>
+                  <select id="pos-payment-status" onchange="togglePosDebtFields()" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-navy-600">
+                    <option value="Lunas">Lunas</option>
+                    <option value="Hutang">Hutang</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Input Data Pelanggan (Muncul jika Hutang) -->
+              <div id="pos-debt-fields" class="hidden p-3 bg-gold-50 border border-gold-400 rounded-xl space-y-2">
+                <p class="text-[11px] font-extrabold text-navy-800">Data Pelanggan Hutang</p>
+                <input type="text" id="pos-debt-name" placeholder="Nama Pelanggan *" class="w-full px-3 py-2 bg-white border border-gold-200 rounded-lg text-xs">
+                <input type="tel" id="pos-debt-wa" placeholder="No. WhatsApp Pelanggan" class="w-full px-3 py-2 bg-white border border-gold-200 rounded-lg text-xs">
+              </div>
+
+              <!-- Input Uang Diterima & Kembalian -->
+              <div class="grid grid-cols-2 gap-2.5 items-end">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-600 mb-1">Uang Diterima (Rp)</label>
+                  <input type="number" id="pos-cash-received" oninput="calculatePosChange()" placeholder="0" min="0" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-navy-600">
+                </div>
+                <div class="bg-white px-3 py-2 rounded-xl border border-slate-200">
+                  <span class="block text-[10px] font-bold text-slate-400">Kembalian</span>
+                  <span id="pos-change-display" class="text-sm font-black text-emerald-600">Rp. 0</span>
+                </div>
+              </div>
+
+              <!-- Tombol Nominal Cepat -->
+              <div class="flex gap-1.5 overflow-x-auto pb-0.5">
+                <button type="button" onclick="setExactCash()" title="Uang Pas" class="px-2.5 py-1 bg-gold-100 hover:bg-gold-200 text-navy-800 rounded-lg text-[11px] font-extrabold shrink-0">Uang Pas</button>
+                <button type="button" onclick="addCashQuick(10000)" class="px-2.5 py-1 bg-white border border-slate-200 hover:border-navy-600 rounded-lg text-[11px] font-bold text-slate-700 shrink-0">+10rb</button>
+                <button type="button" onclick="addCashQuick(20000)" class="px-2.5 py-1 bg-white border border-slate-200 hover:border-navy-600 rounded-lg text-[11px] font-bold text-slate-700 shrink-0">+20rb</button>
+                <button type="button" onclick="addCashQuick(50000)" class="px-2.5 py-1 bg-white border border-slate-200 hover:border-navy-600 rounded-lg text-[11px] font-bold text-slate-700 shrink-0">+50rb</button>
+                <button type="button" onclick="addCashQuick(100000)" class="px-2.5 py-1 bg-white border border-slate-200 hover:border-navy-600 rounded-lg text-[11px] font-bold text-slate-700 shrink-0">+100rb</button>
+              </div>
+
+              <!-- Tombol Proses Checkout -->
+              <button onclick="processCheckout()" class="w-full py-3.5 bg-navy-600 hover:bg-navy-700 text-white font-extrabold rounded-xl shadow-lg shadow-navy-600/25 transition flex items-center justify-center gap-2 text-sm">
+                <span id="pos-checkout-icon" class="text-gold-400"></span>
+                <span>Bayar</span>
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1063,17 +1105,30 @@
           <div id="camera-status-box" class="hidden absolute inset-0 bg-slate-900/95 text-white p-5 flex flex-col items-center justify-center text-center">
             <div id="cam-error-icon" class="w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mb-3"></div>
             <p id="camera-status-text" class="text-xs font-bold leading-relaxed mb-3">Mempersiapkan kamera...</p>
-            <button type="button" onclick="switchToFallbackFromCamera()" class="px-4 py-2 bg-gold-400 hover:bg-gold-500 text-navy-900 font-extrabold text-xs rounded-xl shadow transition">
-              Gunakan Input / Simulasi Barcode
-            </button>
+            <div class="flex flex-wrap items-center justify-center gap-2">
+              <button type="button" id="camera-retry-btn" onclick="retryCameraAccess()" class="hidden px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow transition">
+                Izinkan & Aktifkan Kamera
+              </button>
+              <label class="px-3.5 py-2 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-xl cursor-pointer transition">
+                <span>Ambil Foto / Galeri</span>
+                <input type="file" accept="image/*" capture="environment" onchange="scanBarcodeFromImageFile(event)" class="hidden">
+              </label>
+              <button type="button" onclick="switchToFallbackFromCamera()" class="px-4 py-2 bg-gold-400 hover:bg-gold-500 text-navy-900 font-extrabold text-xs rounded-xl shadow transition">
+                Simulasi Barcode
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Kontrol Kamera (Pilih Kamera & Flash/Senter) -->
+        <!-- Kontrol Kamera (Pilih Kamera, Foto Barcode & Flash/Senter) -->
         <div class="flex items-center gap-2">
           <select id="camera-device-select" onchange="changeCameraDevice()" title="Pilih Kamera Depan / Belakang" class="flex-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-navy-600">
             <option value="">Mendeteksi kamera...</option>
           </select>
+          <label title="Scan Barcode via Kamera Foto / Galeri" class="px-3 py-2 bg-navy-50 hover:bg-navy-100 text-navy-700 border border-navy-200 rounded-xl text-xs font-extrabold cursor-pointer flex items-center gap-1.5 shrink-0 transition">
+            <span>Foto</span>
+            <input type="file" accept="image/*" capture="environment" onchange="scanBarcodeFromImageFile(event)" class="hidden">
+          </label>
           <button type="button" id="camera-torch-btn" onclick="toggleCameraTorch()" title="Nyalakan / Matikan Senter (Flash)" class="hidden px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl text-xs font-extrabold items-center gap-1.5 shrink-0 transition">
             <span id="cam-torch-icon"></span>
             <span>Flash</span>
@@ -1726,14 +1781,12 @@
         'pub-wa-icon': icon('phone', 'w-4 h-4'),
         'pub-search-icon': icon('search', 'w-4 h-4'),
         'close-pub-checkout-btn': icon('x', 'w-4 h-4'),
-        'mob-catalog-btn': icon('store', 'w-4 h-4'),
-        'mob-logout-btn': icon('logout', 'w-4 h-4'),
-        'nav-icon-kasir': icon('pos', 'w-4 h-4'),
-        'nav-icon-barang': icon('box', 'w-4 h-4'),
-        'nav-icon-keuangan': icon('wallet', 'w-4 h-4'),
-        'nav-icon-pengaturan': icon('settings', 'w-4 h-4'),
-        'desk-catalog-icon': icon('store', 'w-3.5 h-3.5'),
-        'desk-logout-icon': icon('logout', 'w-3.5 h-3.5'),
+        'nav-icon-kasir': icon('pos', 'w-5 h-5'),
+        'nav-icon-barang': icon('box', 'w-5 h-5'),
+        'nav-icon-keuangan': icon('wallet', 'w-5 h-5'),
+        'nav-icon-pengaturan': icon('settings', 'w-5 h-5'),
+        'desk-catalog-icon': icon('store', 'w-4 h-4'),
+        'desk-logout-icon': icon('logout', 'w-4 h-4'),
         'pos-barcode-icon': icon('barcode', 'w-4 h-4'),
         'pos-clear-search': icon('x', 'w-4 h-4'),
         'pos-camera-btn-icon': icon('camera', 'w-4 h-4'),
@@ -1742,8 +1795,10 @@
         'close-cam-scanner-btn': icon('x', 'w-4 h-4'),
         'cam-error-icon': icon('camera', 'w-6 h-6'),
         'cam-torch-icon': icon('flashlight', 'w-3.5 h-3.5'),
+        'pos-float-cart-icon': icon('cart', 'w-5 h-5'),
         'pos-cart-header-icon': icon('cart', 'w-4 h-4'),
         'pos-clear-cart-btn': icon('trash', 'w-4 h-4'),
+        'pos-close-drawer-btn': icon('x', 'w-4 h-4'),
         'pos-checkout-icon': icon('receipt', 'w-4 h-4'),
         'barang-add-icon': icon('plus', 'w-4 h-4'),
         'prod-search-icon': icon('search', 'w-3.5 h-3.5'),
@@ -1781,27 +1836,54 @@
     window.addEventListener('DOMContentLoaded', () => {
       injectStaticIcons();
       syncStoreIdentityUI();
+      runSplashScreen();
+    });
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const shareId = urlParams.get('share') || urlParams.get('product');
-      const catalogMode = urlParams.get('catalog');
+    function runSplashScreen() {
+      const splash = document.getElementById('splash-screen');
+      const finishBoot = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const shareId = urlParams.get('share') || urlParams.get('product');
+        const catalogMode = urlParams.get('catalog');
 
-      if (shareId || catalogMode) {
-        sharedProductId = shareId || null;
-        openPublicCatalog();
+        if (shareId || catalogMode) {
+          sharedProductId = shareId || null;
+          openPublicCatalog();
+          return;
+        }
+
+        if (currentUser) {
+          enterApp();
+        } else {
+          showLoginView();
+        }
+      };
+
+      if (!splash) {
+        finishBoot();
         return;
       }
 
-      if (currentUser) {
-        enterApp();
-      } else {
-        showLoginView();
-      }
-    });
+      setTimeout(() => {
+        splash.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => {
+          splash.classList.add('hidden');
+          finishBoot();
+        }, 450);
+      }, 1350);
+    }
 
     function syncStoreIdentityUI() {
       const s = appData.settings;
       const logoHTML = getStoreLogoHTML(s.logo);
+
+      // Splash screen
+      const splashLogo = document.getElementById('splash-store-logo-box');
+      const splashName = document.getElementById('splash-store-name');
+      const splashSlogan = document.getElementById('splash-store-slogan');
+      if (splashLogo) splashLogo.innerHTML = logoHTML;
+      if (splashName) splashName.textContent = s.storeName;
+      if (splashSlogan) splashSlogan.textContent = s.slogan;
 
       // Login screen
       document.getElementById('login-store-logo-box').innerHTML = logoHTML;
@@ -1976,11 +2058,7 @@
 
       const avatarEl = document.getElementById('nav-user-avatar');
       const nameEl = document.getElementById('nav-user-name');
-      const waEl = document.getElementById('nav-user-wa');
-
-      if (avatarEl) avatarEl.textContent = (currentUser.name || 'V').charAt(0).toUpperCase();
       if (nameEl) nameEl.textContent = currentUser.name || 'User';
-      if (waEl) waEl.textContent = currentUser.wa || '-';
     }
 
     function handleLogout() {
@@ -2384,7 +2462,7 @@
             <div class="px-3 pb-3">
               <button onclick="handlePosProductClick('${p.id}')" ${isOut ? 'disabled' : ''} title="${isOut ? 'Stok Habis' : 'Tambah ke Keranjang'}" class="w-full py-2.5 px-3 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${isOut ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-navy-600 hover:bg-navy-700 text-white shadow-sm'}">
                 ${isOut ? '' : icon('plus', 'w-3.5 h-3.5 text-gold-400')}
-                <span>${isOut ? 'Habis' : (variants.length > 1 ? 'Pilih Jenis' : 'Tambah')}</span>
+                <span>${isOut ? 'Habis' : (variants.length > 1 ? 'Beli' : 'Tambah')}</span>
               </button>
             </div>
           </div>
@@ -2527,37 +2605,59 @@
       renderPosCart();
     }
 
+    function openPosCartDrawer() {
+      const drawer = document.getElementById('pos-cart-drawer');
+      if (!drawer) return;
+      renderPosCart();
+      drawer.classList.remove('hidden');
+      drawer.classList.add('flex');
+    }
+
+    function closePosCartDrawer() {
+      const drawer = document.getElementById('pos-cart-drawer');
+      if (!drawer) return;
+      drawer.classList.add('hidden');
+      drawer.classList.remove('flex');
+    }
+
     function renderPosCart() {
       const container = document.getElementById('pos-cart-items');
       const subtitle = document.getElementById('pos-cart-subtitle');
       const totalDisplay = document.getElementById('pos-total-display');
+      const floatBadge = document.getElementById('pos-float-badge');
+      const floatSubtitle = document.getElementById('pos-float-subtitle');
+      const floatTotal = document.getElementById('pos-float-total');
 
       const totalItems = posCart.reduce((sum, i) => sum + i.qty, 0);
       const grandTotal = posCart.reduce((sum, i) => sum + (i.price * i.qty), 0);
 
       subtitle.textContent = `${totalItems} item dipilih`;
       totalDisplay.textContent = formatRupiah(grandTotal);
+      if (floatBadge) floatBadge.textContent = totalItems;
+      if (floatSubtitle) floatSubtitle.textContent = totalItems > 0 ? `Keranjang Belanja (${totalItems} item)` : 'Keranjang Belanja Kosong';
+      if (floatTotal) floatTotal.textContent = formatRupiah(grandTotal);
 
       if (posCart.length === 0) {
         container.innerHTML = `
-          <div class="h-full flex flex-col items-center justify-center text-center py-8 text-slate-400">
-            <div class="text-slate-300 mb-2">${icon('cart', 'w-9 h-9')}</div>
-            <p class="text-xs font-bold">Keranjang masih kosong</p>
-            <p class="text-[11px] mt-0.5">Klik produk atau scan barcode untuk memulai</p>
+          <div class="h-full flex flex-col items-center justify-center text-center py-10 px-4">
+            <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-2">
+              ${icon('cart', 'w-6 h-6')}
+            </div>
+            <p class="text-xs font-extrabold text-slate-600">Keranjang masih kosong</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Klik produk di katalog atau scan barcode untuk memulai transaksi.</p>
           </div>
         `;
       } else {
         container.innerHTML = posCart.map((item, idx) => `
-          <div class="flex items-center justify-between gap-2.5 p-2.5 bg-slate-50 rounded-xl border border-slate-200/70">
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between gap-2.5">
             <div class="flex-1 min-w-0">
               <p class="text-xs font-extrabold text-slate-800 truncate">${item.name}</p>
-              ${item.variant ? `<span class="inline-block mt-0.5 px-2 py-0.5 bg-gold-100 text-navy-900 rounded text-[10px] font-extrabold">${item.variant}</span>` : ''}
-              <p class="text-[11px] text-slate-500 mt-0.5">${formatRupiah(item.price)} / pcs</p>
-              <p class="text-xs font-black text-navy-600 mt-0.5">${formatRupiah(item.price * item.qty)}</p>
+              ${item.variant ? `<span class="inline-block mt-0.5 px-1.5 py-0.5 bg-gold-100 text-navy-900 rounded text-[10px] font-bold">${item.variant}</span>` : ''}
+              <p class="text-[11px] text-slate-500 mt-0.5">${formatRupiah(item.price)} x ${item.qty} = <b class="text-navy-600">${formatRupiah(item.price * item.qty)}</b></p>
             </div>
             <div class="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shrink-0">
               <button onclick="updatePosCartQty(${idx}, -1)" class="w-6 h-6 rounded-md bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-600 font-bold text-xs flex items-center justify-center">-</button>
-              <input type="number" min="1" value="${item.qty}" onchange="setPosCartQtyDirect(${idx}, this.value)" class="w-9 text-center text-xs font-black text-slate-900 focus:outline-none">
+              <input type="number" min="1" value="${item.qty}" onchange="setPosCartQtyDirect(${idx}, this.value)" class="w-9 text-center text-xs font-extrabold text-slate-800 focus:outline-none">
               <button onclick="updatePosCartQty(${idx}, 1)" class="w-6 h-6 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-600 font-bold text-xs flex items-center justify-center">+</button>
             </div>
           </div>
@@ -2705,6 +2805,7 @@
       }
 
       saveAppData();
+      closePosCartDrawer();
       showReceiptModal(newTrx);
 
       // Reset form keranjang
@@ -3983,20 +4084,33 @@
       }
 
       openModal('modal-camera-scanner');
-      showCameraStatus("Menghubungkan ke kamera perangkat...", false);
+      showCameraStatus("Meminta izin akses kamera perangkat...", false);
 
       if (typeof Html5Qrcode === 'undefined') {
-        showCameraStatus("Library pemindai kamera belum termuat. Gunakan input manual atau simulasi.", true);
+        showCameraStatus("Library pemindai kamera belum termuat. Gunakan foto barcode, input manual, atau simulasi.", true);
         return;
       }
 
+      const selectEl = document.getElementById('camera-device-select');
+
       try {
-        availableCameras = await Html5Qrcode.getCameras();
-        const selectEl = document.getElementById('camera-device-select');
+        // 1. Paksa browser memunculkan dialog izin kamera secara eksplisit (user gesture)
+        if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+          const tempStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false
+          });
+          tempStream.getTracks().forEach(track => track.stop());
+        }
+
+        // 2. Setelah izin diberikan, ambil daftar perangkat kamera
+        availableCameras = await withSuppressedCameraConsoleError(() => Html5Qrcode.getCameras());
 
         if (!availableCameras || availableCameras.length === 0) {
-          showCameraStatus("Kamera tidak ditemukan atau izin kamera ditolak oleh browser/iframe.", true);
-          selectEl.innerHTML = `<option value="">Kamera tidak tersedia</option>`;
+          // Fallback langsung menggunakan facingMode environment jika daftar kamera kosong
+          selectEl.innerHTML = `<option value="environment">Kamera Belakang (Default)</option>`;
+          currentCameraId = { facingMode: "environment" };
+          await startHtml5QrcodeStream(currentCameraId);
           return;
         }
 
@@ -4011,27 +4125,97 @@
 
         await startHtml5QrcodeStream(currentCameraId);
       } catch (err) {
-        console.error("Camera init error:", err);
-        showCameraStatus("Izin kamera diblokir atau perangkat tidak memiliki kamera. Gunakan mode simulasi/manual di bawah.", true);
+        const errName = (err && err.name) || '';
+        const errMsg = (err && (err.message || String(err))) || '';
+        const isPermissionIssue = /NotAllowedError|PermissionDeniedError|dismissed|denied|permission/i.test(errName + ' ' + errMsg);
+        const isIframeBlocked = window.self !== window.top;
+
+        selectEl.innerHTML = `<option value="">Izin kamera belum aktif</option>`;
+
+        if (isIframeBlocked && isPermissionIssue) {
+          showCameraStatus(
+            "Browser/iframe pratinjau memblokir video kamera langsung. Buka di tab penuh atau gunakan tombol 'Ambil Foto / Galeri' di bawah untuk memindai barcode lewat kamera HP!",
+            true
+          );
+        } else if (isPermissionIssue) {
+          showCameraStatus(
+            "Izin kamera belum diberikan. Klik ikon gembok/kamera di address bar browser lalu pilih 'Izinkan (Allow)', kemudian tekan 'Izinkan & Aktifkan Kamera'.",
+            true
+          );
+        } else {
+          showCameraStatus(
+            "Kamera video tidak tersedia. Anda tetap dapat memindai barcode menggunakan tombol 'Ambil Foto / Galeri' atau input manual di bawah.",
+            true
+          );
+        }
       }
+    }
+
+    async function scanBarcodeFromImageFile(event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = '';
+      if (!file) return;
+
+      if (typeof Html5Qrcode === 'undefined') {
+        showToast("Pemindai gambar belum siap.", "error");
+        return;
+      }
+
+      showCameraStatus("Membaca kode barcode dari foto...", false);
+      await stopHtml5QrcodeStream();
+
+      try {
+        const fileScanner = new Html5Qrcode("qr-reader-container");
+        const decodedText = await fileScanner.scanFile(file, true);
+        await fileScanner.clear();
+        hideCameraStatus();
+        handleCameraBarcodeDetected(decodedText);
+      } catch (err) {
+        showCameraStatus("Barcode tidak terbaca pada foto tersebut. Pastikan foto barcode jelas & tidak buram, lalu coba lagi.", true);
+      }
+    }
+
+    async function withSuppressedCameraConsoleError(fn) {
+      const origConsoleError = console.error;
+      console.error = (...args) => {
+        const msg = args.map(a => (a && a.message) ? a.message : String(a)).join(' ');
+        if (/Camera init error|Permission dismissed|NotAllowedError|NotFoundError/i.test(msg)) {
+          return;
+        }
+        origConsoleError.apply(console, args);
+      };
+      try {
+        return await fn();
+      } finally {
+        console.error = origConsoleError;
+      }
+    }
+
+    function retryCameraAccess() {
+      openCameraScanner(cameraScanMode, targetBarcodeInputEl ? targetBarcodeInputEl.parentElement.querySelector('button') : null);
     }
 
     function showCameraStatus(msg, isError = false) {
       const statusBox = document.getElementById('camera-status-box');
       const statusText = document.getElementById('camera-status-text');
+      const retryBtn = document.getElementById('camera-retry-btn');
       const frame = document.getElementById('scanner-overlay-frame');
       statusBox.classList.remove('hidden');
       statusText.textContent = msg;
       if (isError) {
         frame.classList.add('hidden');
+        if (retryBtn) retryBtn.classList.remove('hidden');
       } else {
         frame.classList.remove('hidden');
+        if (retryBtn) retryBtn.classList.add('hidden');
       }
     }
 
     function hideCameraStatus() {
       document.getElementById('camera-status-box').classList.add('hidden');
       document.getElementById('scanner-overlay-frame').classList.remove('hidden');
+      const retryBtn = document.getElementById('camera-retry-btn');
+      if (retryBtn) retryBtn.classList.add('hidden');
     }
 
     async function startHtml5QrcodeStream(cameraId) {
@@ -4045,17 +4229,18 @@
       };
 
       try {
-        await html5QrScanner.start(
-          cameraId,
-          config,
-          (decodedText) => handleCameraBarcodeDetected(decodedText),
-          () => {}
+        await withSuppressedCameraConsoleError(() =>
+          html5QrScanner.start(
+            cameraId,
+            config,
+            (decodedText) => handleCameraBarcodeDetected(decodedText),
+            () => {}
+          )
         );
         hideCameraStatus();
         checkTorchCapability();
       } catch (err) {
-        console.error("Start stream error:", err);
-        showCameraStatus("Gagal memulai video kamera. Coba ganti kamera atau gunakan input manual.", true);
+        showCameraStatus("Gagal memulai video kamera. Coba ganti kamera atau gunakan input manual di bawah.", true);
       }
     }
 
