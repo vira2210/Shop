@@ -197,9 +197,9 @@
             <span id="qf-owner-icon"></span>
             <span>Owner</span>
           </button>
-          <button type="button" onclick="quickFillStaff()" class="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition">
+          <button type="button" onclick="clearLoginForm()" class="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition">
             <span id="qf-staff-icon"></span>
-            <span>Pegawai</span>
+            <span>Bersihkan Form</span>
           </button>
         </div>
 
@@ -351,10 +351,10 @@
         </div>
 
         <div class="flex items-center gap-1.5 shrink-0">
-          <span id="cloud-sync-badge" title="Status Sinkronisasi Perangkat" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-[10px] font-extrabold flex items-center gap-1.5">
+          <button type="button" onclick="openSyncModal()" id="cloud-sync-badge" title="Pengaturan Sinkronisasi HP 1 & HP 2" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-[10px] font-extrabold flex items-center gap-1.5 hover:bg-emerald-500/30 transition">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             <span id="cloud-sync-text">Sync Aktif</span>
-          </span>
+          </button>
           <button onclick="openPublicCatalog()" title="Lihat Katalog Publik" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-gold-400 transition flex items-center justify-center">
             <span id="desk-catalog-icon"></span>
           </button>
@@ -1319,6 +1319,47 @@
     </div>
   </div>
 
+  <!-- Modal 9: Sinkronisasi Antar Perangkat (HP 1 <-> HP 2) -->
+  <div id="modal-sync" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div>
+          <h3 class="text-base font-extrabold text-navy-600">Sinkronisasi HP 1 & HP 2</h3>
+          <p id="sync-modal-status" class="text-[11px] font-bold text-emerald-600 mt-0.5">Status: Mengecek koneksi...</p>
+        </div>
+        <button type="button" onclick="closeModal('modal-sync')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600">✕</button>
+      </div>
+
+      <div class="p-3.5 bg-navy-50 rounded-xl border border-navy-200/80 space-y-2">
+        <label class="block text-xs font-extrabold text-navy-800">Kode Ruang Toko (Harus Sama di HP 1 & HP 2)</label>
+        <div class="flex items-center gap-2">
+          <input type="text" id="sync-room-code-input" placeholder="Contoh: VEES-SHOP-01" class="flex-1 px-3 py-2 bg-white border border-navy-200 rounded-xl text-xs font-mono font-black uppercase text-navy-900">
+          <button type="button" onclick="applySyncRoomCode()" class="px-3.5 py-2 bg-navy-600 hover:bg-navy-700 text-white font-extrabold text-xs rounded-xl shrink-0">Hubungkan</button>
+        </div>
+        <p class="text-[10px] text-slate-600 leading-relaxed">
+          Pastikan HP 1 dan HP 2 memakai <b>Kode Ruang Toko</b> yang sama, atau buka link yang sama di kedua HP.
+        </p>
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-xs font-bold text-slate-700">Link Cepat untuk HP 2 (Otomatis Terhubung)</label>
+        <div class="flex items-center gap-2">
+          <input type="text" id="sync-share-link-input" readonly class="flex-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-mono text-slate-700">
+          <button type="button" onclick="copySyncShareLink()" class="px-3.5 py-2 bg-gold-400 hover:bg-gold-500 text-navy-900 font-extrabold text-xs rounded-xl shrink-0">Salin Link</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2.5 pt-2 border-t border-slate-100">
+        <button type="button" onclick="forcePushToCloud()" class="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition">
+          Kirim Data HP Ini
+        </button>
+        <button type="button" onclick="forcePullFromCloud()" class="py-2.5 px-3 bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs rounded-xl shadow-sm transition">
+          Ambil Data Terbaru
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== JAVASCRIPT LOGIC ==================== -->
   <script>
     // ==================== 1. PURE INLINE SVG ICON HELPER ====================
@@ -1521,23 +1562,177 @@
     let sharedProductId = null;
 
     // ==================== CLOUD REAL-TIME SYNC ENGINE (HP 1 <-> HP 2) ====================
+    const SYNC_ROOM_KEY = 'vees_shop_sync_room_v1';
     let cloudDb = null;
     let cloudUser = null;
     let cloudSyncReady = false;
     let isApplyingRemoteSnapshot = false;
     let cloudSaveTimer = null;
+    let unsubscribeCloudListener = null;
+    let currentSyncRoom = getInitialSyncRoom();
+
+    function initCloudRealtimeSync() {
+      updateSyncStatusBadge('online', 'Sync Aktif');
+      bindCloudRoomListener();
+    }
+
+    function bindCloudRoomListener() {
+      if (typeof unsubscribeCloudListener === 'function') {
+        try {
+          unsubscribeCloudListener();
+        } catch (e) {}
+        unsubscribeCloudListener = null;
+      }
+
+      if (!cloudDb || !cloudUser || !window._firestoreOps) {
+        updateSyncStatusBadge('online', 'Sync Aktif');
+        return;
+      }
+
+      try {
+        const { docRef, onSnapshot } = window._firestoreOps;
+        if (docRef && typeof onSnapshot === 'function') {
+          unsubscribeCloudListener = onSnapshot(docRef, (snap) => {
+            if (!snap.exists()) return;
+            const data = snap.data();
+            if (!data || !data.payload) return;
+            try {
+              isApplyingRemoteSnapshot = true;
+              appData = applyNormalizedAppData(JSON.parse(data.payload));
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+              refreshAllVisibleViews();
+              updateSyncStatusBadge('online', 'Sync Aktif');
+            } catch (parseErr) {
+              console.error('Gagal menerapkan snapshot cloud:', parseErr);
+            } finally {
+              isApplyingRemoteSnapshot = false;
+            }
+          }, (err) => {
+            console.error('Error listener cloud:', err);
+            updateSyncStatusBadge('offline', 'Offline');
+          });
+        }
+      } catch (err) {
+        console.error('Gagal mengikat listener ruang toko:', err);
+        updateSyncStatusBadge('offline', 'Offline');
+      }
+    }
+
+    function getInitialSyncRoom() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlRoom = (params.get('toko') || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+        if (urlRoom) {
+          localStorage.setItem(SYNC_ROOM_KEY, urlRoom);
+          return urlRoom;
+        }
+        const saved = (localStorage.getItem(SYNC_ROOM_KEY) || '').trim().toUpperCase();
+        if (saved) return saved;
+      } catch (e) {}
+      return 'VEES-SHOP-MAIN';
+    }
 
     function updateSyncStatusBadge(state, label) {
       const badge = document.getElementById('cloud-sync-badge');
       const textEl = document.getElementById('cloud-sync-text');
-      if (!badge || !textEl) return;
-      textEl.textContent = label;
+      const modalStatus = document.getElementById('sync-modal-status');
+      if (textEl) textEl.textContent = label;
+      if (modalStatus) modalStatus.textContent = `Status: ${label} (Ruang: ${currentSyncRoom})`;
+      if (!badge) return;
       if (state === 'online') {
-        badge.className = 'px-2.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-[10px] font-extrabold flex items-center gap-1.5';
+        badge.className = 'px-2.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-[10px] font-extrabold flex items-center gap-1.5 hover:bg-emerald-500/30 transition';
       } else if (state === 'syncing') {
-        badge.className = 'px-2.5 py-1.5 rounded-xl bg-gold-400/20 border border-gold-400/50 text-gold-300 text-[10px] font-extrabold flex items-center gap-1.5';
+        badge.className = 'px-2.5 py-1.5 rounded-xl bg-gold-400/20 border border-gold-400/50 text-gold-300 text-[10px] font-extrabold flex items-center gap-1.5 transition';
       } else {
-        badge.className = 'px-2.5 py-1.5 rounded-xl bg-white/10 border border-white/20 text-slate-300 text-[10px] font-extrabold flex items-center gap-1.5';
+        badge.className = 'px-2.5 py-1.5 rounded-xl bg-rose-500/25 border border-rose-400/50 text-rose-200 text-[10px] font-extrabold flex items-center gap-1.5 transition';
+      }
+    }
+
+    function openSyncModal() {
+      const codeInp = document.getElementById('sync-room-code-input');
+      const linkInp = document.getElementById('sync-share-link-input');
+      if (codeInp) codeInp.value = currentSyncRoom;
+      const baseUrl = window.location.href.split('?')[0];
+      if (linkInp) linkInp.value = `${baseUrl}?toko=${encodeURIComponent(currentSyncRoom)}`;
+      openModal('modal-sync');
+    }
+
+    function copySyncShareLink() {
+      const inp = document.getElementById('sync-share-link-input');
+      if (!inp) return;
+      inp.select();
+      inp.setSelectionRange(0, 99999);
+      try {
+        document.execCommand('copy');
+        showToast("Link sinkronisasi disalin! Buka link ini di HP 2.", "success");
+      } catch (e) {
+        showToast("Salin link secara manual dari kotak di atas.", "warning");
+      }
+    }
+
+    async function applySyncRoomCode() {
+      const inp = document.getElementById('sync-room-code-input');
+      const cleaned = (inp ? inp.value : '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+      if (!cleaned) {
+        showToast("Kode ruang toko tidak boleh kosong!", "error");
+        return;
+      }
+      currentSyncRoom = cleaned;
+      try {
+        localStorage.setItem(SYNC_ROOM_KEY, cleaned);
+        const baseUrl = window.location.href.split('?')[0];
+        window.history.replaceState({}, document.title, `${baseUrl}?toko=${encodeURIComponent(cleaned)}`);
+      } catch (e) {}
+      openSyncModal();
+      await bindCloudRoomListener();
+      showToast(`Terhubung ke ruang toko: ${cleaned}`, "success");
+    }
+
+    async function forcePushToCloud() {
+      if (!cloudDb || !cloudUser || !window._firestoreOps) {
+        showToast("Koneksi cloud belum siap.", "warning");
+        return;
+      }
+      try {
+        updateSyncStatusBadge('syncing', 'Mengirim...');
+        const { docRef, setDoc } = window._firestoreOps;
+        await setDoc(docRef, {
+          payload: JSON.stringify(appData),
+          updatedAt: new Date().toISOString(),
+          updatedBy: currentUser ? currentUser.name : 'ManualPush'
+        });
+        updateSyncStatusBadge('online', 'Sync Aktif');
+        showToast("Data HP ini berhasil dikirim ke semua perangkat!", "success");
+      } catch (e) {
+        updateSyncStatusBadge('offline', 'Gagal Sync');
+        showToast("Gagal mengirim data ke cloud.", "error");
+      }
+    }
+
+    async function forcePullFromCloud() {
+      if (!cloudDb || !cloudUser || !window._firestoreOps) {
+        showToast("Koneksi cloud belum siap.", "warning");
+        return;
+      }
+      try {
+        updateSyncStatusBadge('syncing', 'Mengambil...');
+        const { docRef, getDoc } = window._firestoreOps;
+        const snap = await getDoc(docRef);
+        if (snap.exists() && snap.data().payload) {
+          isApplyingRemoteSnapshot = true;
+          appData = applyNormalizedAppData(JSON.parse(snap.data().payload));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+          refreshAllVisibleViews();
+          isApplyingRemoteSnapshot = false;
+          updateSyncStatusBadge('online', 'Sync Aktif');
+          showToast("Data terbaru berhasil dimuat!", "success");
+        } else {
+          updateSyncStatusBadge('online', 'Sync Aktif');
+          showToast("Belum ada data tersimpan di ruang toko ini.", "info");
+        }
+      } catch (e) {
+        updateSyncStatusBadge('offline', 'Gagal Sync');
+        showToast("Gagal mengambil data dari cloud.", "error");
       }
     }
 
@@ -1889,20 +2084,37 @@
 
     function quickFillOwner() {
       const s = appData.settings || defaultData.settings;
-      document.getElementById('login-name').value = s.ownerName || 'vee3yah';
-      document.getElementById('login-wa').value = s.ownerWa || '081554894469';
-      document.getElementById('login-pin').value = s.ownerPin || '1234';
+      const nameEl = document.getElementById('login-name');
+      const waEl = document.getElementById('login-wa');
+      const pinEl = document.getElementById('login-pin');
+      if (nameEl) {
+        nameEl.value = s.ownerName || 'vee3yah';
+        nameEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (waEl) {
+        waEl.value = s.ownerWa || '081554894469';
+        waEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (pinEl) {
+        // PIN sengaja tidak diisi otomatis demi keamanan akses
+        pinEl.type = 'password';
+        pinEl.value = '';
+        pinEl.dispatchEvent(new Event('input', { bubbles: true }));
+        pinEl.focus();
+      }
+      showToast("Nama & WA Owner terisi. Masukkan PIN secara manual.", "info");
     }
 
-    function quickFillStaff() {
-      const activeStaff = (appData.staffs || []).find(st => st.active !== false);
-      if (activeStaff) {
-        document.getElementById('login-name').value = activeStaff.name;
-        document.getElementById('login-wa').value = activeStaff.wa;
-        document.getElementById('login-pin').value = activeStaff.pin;
-      } else {
-        showToast("Belum ada akun pegawai aktif.", "warning");
-      }
+    function clearLoginForm() {
+      ['login-name', 'login-wa', 'login-pin'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          if (id === 'login-pin') el.type = 'password';
+          el.value = '';
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+      showToast("Form login dibersihkan.", "info");
     }
 
     document.getElementById('form-login').addEventListener('submit', (e) => {
@@ -2025,97 +2237,43 @@
       }
     }
 
-    async function initCloudRealtimeSync() {
-      try {
-        if (typeof __firebase_config === 'undefined') {
-          updateSyncStatusBadge('offline', 'Mode Lokal');
-          return;
-        }
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'vees-shop-default';
-
-        const [{ initializeApp }, { getAuth, signInWithCustomToken, signInAnonymously }, { getFirestore, doc, onSnapshot, setDoc }] = await Promise.all([
-          import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"),
-          import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"),
-          import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js")
-        ]);
-
-        const fbApp = initializeApp(firebaseConfig);
-        const fbAuth = getAuth(fbApp);
-        cloudDb = getFirestore(fbApp);
-
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(fbAuth, __initial_auth_token);
-        } else {
-          await signInAnonymously(fbAuth);
-        }
-        cloudUser = fbAuth.currentUser;
-        if (!cloudUser) return;
-
-        const docRef = doc(cloudDb, 'artifacts', appId, 'public', 'data', 'store_sync', 'main_state');
-        window._firestoreOps = { docRef, setDoc };
-
-        onSnapshot(docRef, (snap) => {
-          if (snap.exists()) {
-            const remote = snap.data();
-            if (remote && remote.payload) {
-              const parsed = applyNormalizedAppData(JSON.parse(remote.payload));
-              isApplyingRemoteSnapshot = true;
-              appData = parsed;
-              try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
-              } catch (e) {}
-              refreshAllVisibleViews();
-              isApplyingRemoteSnapshot = false;
-            }
-          } else {
-            scheduleCloudPush(appData);
-          }
-          cloudSyncReady = true;
-          updateSyncStatusBadge('online', 'Sync Aktif');
-        }, (err) => {
-          console.error("Listener sinkronisasi error:", err);
-          updateSyncStatusBadge('offline', 'Sync Terputus');
-        });
-      } catch (err) {
-        console.error("Inisialisasi sinkronisasi gagal:", err);
-        updateSyncStatusBadge('offline', 'Mode Lokal');
-      }
-    }
-
-    // ==================== 8. MENU 1: KASIR (POS) ====================
+    // ==================== 8. MENU 1: KASIR (POS), KERANJANG & STRUK ====================
     function renderPosCategories() {
-      const categories = ['ALL', ...new Set(appData.products.map(p => p.category).filter(Boolean))];
       const container = document.getElementById('pos-category-pills');
-      container.innerHTML = categories.map(cat => {
-        const isActive = posSelectedCategory === cat;
-        const label = cat === 'ALL' ? 'Semua Produk' : cat;
+      if (!container) return;
+      const cats = ['ALL', ...new Set((appData.products || []).map(p => p.category).filter(Boolean))];
+      if (!cats.includes(posSelectedCategory)) posSelectedCategory = 'ALL';
+
+      container.innerHTML = cats.map(cat => {
+        const active = posSelectedCategory === cat;
+        const label = cat === 'ALL' ? 'Semua' : cat;
         return `
-          <button onclick="selectPosCategory('${cat.replace(/'/g, "\\'")}')" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold shrink-0 transition ${isActive ? 'bg-navy-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
-            ${label}
-          </button>
+          <button type="button" onclick="selectPosCategory('${cat.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition ${
+            active ? 'bg-navy-600 text-gold-400 shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+          }">${label}</button>
         `;
       }).join('');
     }
 
     function selectPosCategory(cat) {
-      posSelectedCategory = cat;
+      posSelectedCategory = cat || 'ALL';
       renderPosCategories();
       renderPosCatalog();
     }
 
     function handlePosSearchKeyup(e) {
-      const val = e.target.value.trim();
+      const inp = document.getElementById('pos-search-input');
       const clearBtn = document.getElementById('pos-clear-search');
-      if (val) clearBtn.classList.remove('hidden');
-      else clearBtn.classList.add('hidden');
-
-      if (e.key === 'Enter' && val !== '') {
+      const val = (inp ? inp.value : '').trim();
+      if (clearBtn) {
+        clearBtn.classList.toggle('hidden', val.length === 0);
+      }
+      if (e && e.key === 'Enter' && val) {
         const matched = findProductByBarcode(val);
         if (matched) {
           addToPosCart(matched.product.id, 1, matched.variant);
-          e.target.value = '';
-          clearBtn.classList.add('hidden');
+          inp.value = '';
+          if (clearBtn) clearBtn.classList.add('hidden');
           renderPosCatalog();
           return;
         }
@@ -2125,177 +2283,131 @@
 
     function clearPosSearch() {
       const inp = document.getElementById('pos-search-input');
-      inp.value = '';
-      document.getElementById('pos-clear-search').classList.add('hidden');
+      const clearBtn = document.getElementById('pos-clear-search');
+      if (inp) inp.value = '';
+      if (clearBtn) clearBtn.classList.add('hidden');
       renderPosCatalog();
-    }
-
-    function findProductByBarcode(code) {
-      const q = (code || '').toString().toLowerCase().trim();
-      if (!q) return null;
-      for (const p of (appData.products || [])) {
-        if (p.barcodes && Array.isArray(p.barcodes)) {
-          const foundBc = p.barcodes.find(b => (b.code || '').toString().toLowerCase().trim() === q);
-          if (foundBc) {
-            return {
-              product: p,
-              qty: 1,
-              variant: (foundBc.variant || '').trim()
-            };
-          }
-        }
-      }
-      return null;
-    }
-
-    function cycleCardImage(productId, delta, e) {
-      if (e) e.stopPropagation();
-      const prod = appData.products.find(p => p.id === productId);
-      if (!prod || !prod.images || prod.images.length <= 1) return;
-      const curIdx = activeCardImageIndex[productId] || 0;
-      const nextIdx = (curIdx + delta + prod.images.length) % prod.images.length;
-      activeCardImageIndex[productId] = nextIdx;
-      const imgEl = document.getElementById(`pos-img-${productId}`);
-      if (imgEl) {
-        imgEl.src = prod.images[nextIdx];
-      }
     }
 
     function renderPosCatalog() {
       const grid = document.getElementById('pos-product-grid');
-      const query = (document.getElementById('pos-search-input').value || '').toLowerCase().trim();
+      if (!grid) return;
+      const search = ((document.getElementById('pos-search-input') && document.getElementById('pos-search-input').value) || '').toLowerCase().trim();
 
-      const filtered = appData.products.filter(p => {
+      const filtered = (appData.products || []).filter(p => {
         const matchCat = posSelectedCategory === 'ALL' || p.category === posSelectedCategory;
-        const matchName = p.name.toLowerCase().includes(query) || (p.category || '').toLowerCase().includes(query);
-        const matchBc = (p.barcodes || []).some(b =>
-          b.code.toLowerCase().includes(query) || (b.variant || '').toLowerCase().includes(query)
+        const matchName = (p.name || '').toLowerCase().includes(search) || (p.category || '').toLowerCase().includes(search);
+        const matchBarcode = (p.barcodes || []).some(b =>
+          (b.code || '').toLowerCase().includes(search) || (b.variant || '').toLowerCase().includes(search)
         );
-        return matchCat && (matchName || matchBc);
+        return matchCat && (!search || matchName || matchBarcode);
       });
 
       if (filtered.length === 0) {
         grid.innerHTML = `
-          <div class="col-span-full bg-white rounded-2xl p-10 text-center border border-slate-200">
-            <div class="text-slate-300 flex justify-center mb-3">${icon('box', 'w-10 h-10')}</div>
-            <p class="text-sm font-bold text-slate-700">Produk tidak ditemukan</p>
-            <p class="text-xs text-slate-500 mt-1">Coba kata kunci lain atau tambahkan produk baru di menu Barang.</p>
+          <div class="col-span-full bg-white rounded-2xl border border-slate-200 p-10 text-center">
+            <p class="text-sm font-bold text-slate-600">Tidak ada produk yang cocok</p>
+            <p class="text-xs text-slate-400 mt-1">Coba kata kunci lain atau tambah barang baru di menu Barang.</p>
           </div>
         `;
         return;
       }
 
       grid.innerHTML = filtered.map(p => {
-        const imgs = (p.images && p.images.length > 0) ? p.images : ['https://placehold.co/300x300/f1f5f9/64748b?text=No+Image'];
-        const imgIdx = activeCardImageIndex[p.id] || 0;
-        const isLow = p.stock <= p.minStock;
-        const isOut = p.stock <= 0;
         const packSize = Number(p.packSize) || 1;
         const stockLabel = formatStockWithCarton(p.stock, packSize, p.cartonStock);
-        const variants = (p.barcodes || []).map(b => (b.variant || '').trim()).filter(Boolean);
+        const isOut = (Number(p.stock) || 0) <= 0;
+        const isLow = !isOut && (Number(p.stock) || 0) <= (Number(p.minStock) || 5);
+        const thumb = (p.images && p.images[0]) ? p.images[0] : 'https://placehold.co/300x300/f1f5f9/64748b?text=Produk';
 
         return `
-          <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition overflow-hidden flex flex-col justify-between group">
+          <div onclick="handlePosProductClick('${p.id}')" class="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md hover:border-navy-600/40 overflow-hidden flex flex-col justify-between transition ${isOut ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer active:scale-[0.99]'}">
             <div>
-              <div class="relative aspect-square bg-slate-100 overflow-hidden">
-                <img id="pos-img-${p.id}" src="${imgs[imgIdx]}" alt="${p.name}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" onerror="this.src='https://placehold.co/300x300/f1f5f9/64748b?text=Produk'">
+              <div class="relative aspect-square bg-slate-100">
+                <img src="${thumb}" alt="${p.name}" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/300x300/f1f5f9/64748b?text=Produk';">
                 <span class="absolute top-2 left-2 px-2 py-0.5 rounded-lg text-[10px] font-extrabold shadow-sm ${isOut ? 'bg-slate-800 text-white' : (isLow ? 'bg-rose-600 text-white' : 'bg-navy-600/95 text-white')}">
                   Stok: ${stockLabel}
                 </span>
-                <button onclick="openShareProductModal('${p.id}')" title="Bagikan Link Katalog Produk" class="absolute top-2 right-2 w-8 h-8 rounded-xl bg-white/95 hover:bg-gold-400 text-navy-600 hover:text-navy-900 shadow flex items-center justify-center transition">
-                  ${icon('share', 'w-3.5 h-3.5')}
-                </button>
-                ${imgs.length > 1 ? `
-                  <button onclick="cycleCardImage('${p.id}', -1, event)" title="Foto Sebelumnya" class="absolute left-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-navy-900/70 text-white flex items-center justify-center hover:bg-navy-900">
-                    ${icon('chevLeft', 'w-3.5 h-3.5')}
-                  </button>
-                  <button onclick="cycleCardImage('${p.id}', 1, event)" title="Foto Berikutnya" class="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-navy-900/70 text-white flex items-center justify-center hover:bg-navy-900">
-                    ${icon('chevRight', 'w-3.5 h-3.5')}
-                  </button>
-                ` : ''}
               </div>
-
               <div class="p-3">
-                <span class="text-[10px] font-extrabold text-gold-600 uppercase tracking-wider">${p.category}</span>
-                <h3 class="font-bold text-slate-800 text-xs sm:text-sm line-clamp-2 mt-0.5 leading-snug">${p.name}</h3>
-                ${variants.length > 0 ? `
-                  <div class="flex flex-wrap gap-1 mt-1.5">
-                    ${variants.slice(0, 2).map(v => `<span class="px-1.5 py-0.5 bg-gold-50 text-navy-800 border border-gold-300/70 rounded text-[9px] font-bold truncate max-w-[110px]">${v}</span>`).join('')}
-                    ${variants.length > 2 ? `<span class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[9px] font-bold">+${variants.length - 2}</span>` : ''}
-                  </div>
-                ` : ''}
+                <span class="text-[10px] font-extrabold text-gold-600 uppercase">${p.category || 'Umum'}</span>
+                <h4 class="font-bold text-slate-800 text-xs sm:text-sm line-clamp-2 mt-0.5">${p.name}</h4>
                 <p class="font-black text-navy-600 text-sm mt-1.5">${formatRupiah(p.sellPrice)}</p>
+                ${packSize > 1 ? `<p class="text-[10px] font-bold text-slate-500 mt-0.5">1 Karton = ${packSize} pcs (${formatRupiah(Number(p.sellPrice || 0) * packSize)})</p>` : ''}
               </div>
-            </div>
-
-            <div class="px-3 pb-3">
-              <button onclick="handlePosProductClick('${p.id}')" ${isOut ? 'disabled' : ''} title="${isOut ? 'Stok Habis' : 'Tambah ke Keranjang'}" class="w-full py-2.5 px-3 rounded-xl text-xs font-extrabold transition flex items-center justify-center gap-1.5 ${isOut ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-navy-600 hover:bg-navy-700 text-white shadow-sm'}">
-                ${isOut ? '' : icon('plus', 'w-3.5 h-3.5 text-gold-400')}
-                <span>${isOut ? 'Habis' : (variants.length > 1 ? 'check-out' : 'Tambah')}</span>
-              </button>
             </div>
           </div>
         `;
       }).join('');
+    }
+
+    function findProductByBarcode(code) {
+      const target = (code || '').trim().toLowerCase();
+      if (!target) return null;
+      for (const prod of (appData.products || [])) {
+        for (const b of (prod.barcodes || [])) {
+          if ((b.code || '').trim().toLowerCase() === target) {
+            return { product: prod, variant: (b.variant || '').trim(), barcodeItem: b };
+          }
+        }
+      }
+      return null;
     }
 
     function handlePosProductClick(productId) {
-      const prod = appData.products.find(p => p.id === productId);
-      if (!prod) return;
+      const prod = (appData.products || []).find(p => p.id === productId);
+      if (!prod || (Number(prod.stock) || 0) <= 0) return;
 
-      const totalPcs = Number(prod.stock) || 0;
-      const totalKarton = Number(prod.cartonStock) || 0;
-      if (totalPcs <= 0 && totalKarton <= 0) return;
+      const barcodes = prod.barcodes || [];
+      const namedVariants = barcodes.filter(b => (b.variant || '').trim() !== '');
+      const packSize = Number(prod.packSize) || 1;
+      const hasCartonOption = packSize > 1 && (Number(prod.stock) || 0) >= packSize;
 
-      openVariantSelectorModal(prod);
+      if (namedVariants.length > 1 || hasCartonOption) {
+        openVariantSelectorModal(prod);
+      } else if (namedVariants.length === 1) {
+        addToPosCart(prod.id, 1, namedVariants[0].variant.trim());
+      } else {
+        addToPosCart(prod.id, 1, '');
+      }
     }
 
-    let activeSelectorProductId = null;
+    let activeVariantModalProduct = null;
 
     function openVariantSelectorModal(prod) {
-      activeSelectorProductId = prod.id;
-      const packSize = Math.max(1, Number(prod.packSize) || 1);
-      const totalPcs = Number(prod.stock) || 0;
-      const totalKarton = Number(prod.cartonStock) || 0;
-      const cartonPrice = prod.sellPrice * packSize;
-
+      activeVariantModalProduct = prod;
+      const packSize = Number(prod.packSize) || 1;
       document.getElementById('sel-var-prod-name').textContent = prod.name;
-      document.getElementById('sel-var-prod-stock').textContent =
-        `Pcs: ${formatRupiah(prod.sellPrice)} • Ktn (${packSize}): ${formatRupiah(cartonPrice)}`;
+      document.getElementById('sel-var-prod-stock').textContent = `Sisa stok: ${formatStockWithCarton(prod.stock, packSize, prod.cartonStock)} • ${formatRupiah(prod.sellPrice)}/pcs`;
+
+      const variants = (prod.barcodes && prod.barcodes.length > 0)
+        ? prod.barcodes
+        : [{ code: '', variant: 'Standar', qty: prod.stock, cartonQty: prod.cartonStock || 0 }];
 
       const list = document.getElementById('sel-var-list');
-      const rawBarcodes = (prod.barcodes && prod.barcodes.length > 0)
-        ? prod.barcodes
-        : [{ code: '', variant: 'Standar', qty: totalPcs, cartonQty: totalKarton, image: '' }];
-
-      list.innerHTML = rawBarcodes.map((b, idx) => {
-        const varName = (b.variant || '').trim() || `Varian ${idx + 1}`;
-        const varPcs = Math.max(0, Number(b.qty) || 0);
-        const varKtn = Math.max(0, Number(b.cartonQty) || 0);
-
+      list.innerHTML = variants.map((v, idx) => {
+        const vName = (v.variant || '').trim() || `Varian ${idx + 1}`;
         return `
-          <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200/90 sel-var-row" data-var-name="${varName.replace(/"/g, '&quot;')}" data-var-idx="${idx}">
-            <div class="flex items-center justify-between gap-2 mb-2">
-              <span class="text-xs font-extrabold text-slate-900 truncate">${varName}</span>
-              <span class="text-[10px] font-bold text-slate-500 shrink-0">${varPcs} pcs &bull; ${varKtn} ktn</span>
+          <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-black text-slate-900">${vName}</span>
+              <span class="text-[11px] font-bold text-navy-600">${formatRupiah(prod.sellPrice)}/pcs</span>
             </div>
-
             <div class="grid grid-cols-2 gap-2">
-              <div class="flex items-center justify-between bg-white px-2 py-1 rounded-lg border border-slate-200">
-                <span class="text-[10px] font-extrabold text-slate-600">Pcs</span>
+              <div class="bg-white p-2 rounded-xl border border-slate-200 flex items-center justify-between">
+                <span class="text-[11px] font-bold text-slate-600">Pcs</span>
                 <div class="flex items-center gap-1">
-                  <button type="button" onclick="stepSelectorQty(this, -1)" class="w-6 h-6 rounded bg-slate-100 hover:bg-rose-100 text-slate-700 font-black text-xs">-</button>
-                  <input type="number" min="0" max="${varPcs}" value="0" class="sel-input-pcs w-8 text-center text-xs font-black text-slate-900 focus:outline-none">
-                  <button type="button" onclick="stepSelectorQty(this, 1)" class="w-6 h-6 rounded bg-slate-100 hover:bg-emerald-100 text-slate-700 font-black text-xs">+</button>
+                  <button type="button" onclick="stepVariantQty('var-pcs-${idx}', -1)" class="w-6 h-6 rounded bg-slate-100 font-bold text-xs">-</button>
+                  <input type="number" min="0" value="${idx === 0 ? 1 : 0}" id="var-pcs-${idx}" data-var-name="${vName.replace(/"/g, '&quot;')}" data-mult="1" onchange="updateVariantConfirmSummary()" class="var-qty-input w-10 text-center text-xs font-extrabold">
+                  <button type="button" onclick="stepVariantQty('var-pcs-${idx}', 1)" class="w-6 h-6 rounded bg-slate-100 font-bold text-xs">+</button>
                 </div>
               </div>
-
-              <div class="flex items-center justify-between bg-gold-50/70 px-2 py-1 rounded-lg border border-gold-300/80">
-                <span class="text-[10px] font-extrabold text-navy-900">Ktn</span>
+              <div class="bg-white p-2 rounded-xl border border-slate-200 flex items-center justify-between">
+                <span class="text-[11px] font-bold text-slate-600">Ktn</span>
                 <div class="flex items-center gap-1">
-                  <button type="button" onclick="stepSelectorQty(this, -1)" class="w-6 h-6 rounded bg-white hover:bg-rose-100 text-slate-700 font-black text-xs border border-gold-200">-</button>
-                  <input type="number" min="0" max="${varKtn}" value="0" class="sel-input-karton w-8 text-center text-xs font-black text-navy-900 bg-transparent focus:outline-none">
-                  <button type="button" onclick="stepSelectorQty(this, 1)" class="w-6 h-6 rounded bg-white hover:bg-emerald-100 text-slate-700 font-black text-xs border border-gold-200">+</button>
+                  <button type="button" onclick="stepVariantQty('var-ktn-${idx}', -1)" class="w-6 h-6 rounded bg-slate-100 font-bold text-xs">-</button>
+                  <input type="number" min="0" value="0" id="var-ktn-${idx}" data-var-name="${vName.replace(/"/g, '&quot;')}" data-mult="${packSize}" onchange="updateVariantConfirmSummary()" class="var-qty-input w-10 text-center text-xs font-extrabold">
+                  <button type="button" onclick="stepVariantQty('var-ktn-${idx}', 1)" class="w-6 h-6 rounded bg-slate-100 font-bold text-xs">+</button>
                 </div>
               </div>
             </div>
@@ -2303,196 +2415,220 @@
         `;
       }).join('');
 
+      updateVariantConfirmSummary();
       openModal('modal-select-variant');
     }
 
-    function stepSelectorQty(btn, delta) {
-      const input = btn.parentElement.querySelector('input[type="number"]');
-      if (!input) return;
-      const maxVal = input.max !== '' ? parseInt(input.max, 10) : 999999;
-      const curVal = parseInt(input.value, 10) || 0;
-      const nextVal = Math.max(0, Math.min(maxVal, curVal + delta));
-      input.value = nextVal;
+    function stepVariantQty(inputId, delta) {
+      const inp = document.getElementById(inputId);
+      if (!inp) return;
+      const next = Math.max(0, (Number(inp.value) || 0) + delta);
+      inp.value = next;
+      updateVariantConfirmSummary();
+    }
+
+    function updateVariantConfirmSummary() {
+      const btn = document.getElementById('sel-var-confirm-btn');
+      if (!btn || !activeVariantModalProduct) return;
+      let totalPcs = 0;
+      document.querySelectorAll('#sel-var-list .var-qty-input').forEach(inp => {
+        const val = Math.max(0, Number(inp.value) || 0);
+        const mult = Number(inp.dataset.mult) || 1;
+        totalPcs += val * mult;
+      });
+      const totalAmt = totalPcs * (Number(activeVariantModalProduct.sellPrice) || 0);
+      btn.innerHTML = `<span>Masukkan ke Keranjang (${totalPcs} pcs • ${formatRupiah(totalAmt)})</span>`;
     }
 
     function confirmSelectedVariantsToCart() {
-      const prod = appData.products.find(p => p.id === activeSelectorProductId);
-      if (!prod) return;
+      if (!activeVariantModalProduct) return;
+      const prod = activeVariantModalProduct;
+      const grouped = {};
 
-      const packSize = Math.max(1, Number(prod.packSize) || 1);
-      let addedAny = false;
-
-      document.querySelectorAll('#sel-var-list .sel-var-row').forEach(row => {
-        const varName = row.dataset.varName || '';
-        const pcsQty = Math.max(0, parseInt(row.querySelector('.sel-input-pcs')?.value, 10) || 0);
-        const ktnQty = Math.max(0, parseInt(row.querySelector('.sel-input-karton')?.value, 10) || 0);
-
-        if (pcsQty > 0) {
-          addToPosCart(prod.id, pcsQty, `${varName} - Pcs`, 'pcs', prod.sellPrice, varName);
-          addedAny = true;
-        }
-        if (ktnQty > 0) {
-          addToPosCart(prod.id, ktnQty, `${varName} - Karton (${packSize} pcs)`, 'karton', prod.sellPrice * packSize, varName);
-          addedAny = true;
+      document.querySelectorAll('#sel-var-list .var-qty-input').forEach(inp => {
+        const val = Math.max(0, Number(inp.value) || 0);
+        const mult = Number(inp.dataset.mult) || 1;
+        const vName = inp.dataset.varName || '';
+        const pcs = val * mult;
+        if (pcs > 0) {
+          grouped[vName] = (grouped[vName] || 0) + pcs;
         }
       });
 
-      if (!addedAny) {
-        showToast("Pilih minimal 1 pcs atau 1 karton pada salah satu varian!", "warning");
+      const entries = Object.entries(grouped);
+      if (entries.length === 0) {
+        showToast("Pilih minimal 1 pcs atau karton terlebih dahulu.", "warning");
         return;
       }
 
+      const requestedTotal = entries.reduce((s, [, q]) => s + q, 0);
+      if (requestedTotal > (Number(prod.stock) || 0)) {
+        showToast(`Jumlah melebihi sisa stok (${prod.stock} pcs)!`, "error");
+        return;
+      }
+
+      entries.forEach(([vName, pcs]) => {
+        addToPosCart(prod.id, pcs, vName);
+      });
+
       closeModal('modal-select-variant');
+      activeVariantModalProduct = null;
     }
 
-    function selectVariantForCart(productId, qty, variant) {
-      closeModal('modal-select-variant');
-      addToPosCart(productId, qty, variant, 'pcs');
-    }
-
-    function addToPosCart(productId, qtyToAdd = 1, variant = '', unitType = 'pcs', customPrice = null, rawVariantName = '') {
-      const prod = appData.products.find(p => p.id === productId);
+    function addToPosCart(productId, qtyToAdd = 1, variant = '') {
+      const prod = (appData.products || []).find(p => p.id === productId);
       if (!prod) return;
+      const addQty = Math.max(1, Number(qtyToAdd) || 1);
+      const currentInCart = posCart
+        .filter(i => i.productId === productId)
+        .reduce((sum, i) => sum + i.qty, 0);
 
-      const isCarton = unitType === 'karton';
-      const availableStock = isCarton ? (Number(prod.cartonStock) || 0) : (Number(prod.stock) || 0);
-      const unitLabel = isCarton ? 'karton' : 'pcs';
-
-      if (availableStock <= 0) {
-        showToast(`Stok ${unitLabel} "${prod.name}" sedang habis!`, "error");
+      if (currentInCart + addQty > (Number(prod.stock) || 0)) {
+        showToast(`Stok ${prod.name} tidak mencukupi (tersisa ${prod.stock} pcs).`, "warning");
         return;
       }
 
-      const cleanVariant = (variant || '').trim();
-      const baseVariant = (rawVariantName || cleanVariant).trim();
-      const unitPrice = customPrice !== null ? customPrice : prod.sellPrice;
-
-      const totalUnitInCart = posCart
-        .filter(item => item.productId === productId && (item.unitType || 'pcs') === unitType)
-        .reduce((sum, item) => sum + item.qty, 0);
-
-      if (totalUnitInCart + qtyToAdd > availableStock) {
-        showToast(`Stok ${unitLabel} tidak mencukupi! Sisa: ${availableStock} ${unitLabel}.`, "warning");
-        return;
-      }
-
-      const existing = posCart.find(item =>
-        item.productId === productId &&
-        (item.variant || '') === cleanVariant &&
-        (item.unitType || 'pcs') === unitType
-      );
-
+      const existing = posCart.find(i => i.productId === productId && (i.variant || '') === (variant || ''));
       if (existing) {
-        existing.qty += qtyToAdd;
+        existing.qty += addQty;
       } else {
         posCart.push({
-          cartKey: `${prod.id}__${cleanVariant}__${unitType}`,
           productId: prod.id,
           name: prod.name,
-          variant: cleanVariant,
-          rawVariant: baseVariant,
-          unitType: unitType,
-          price: unitPrice,
-          qty: qtyToAdd
+          price: Number(prod.sellPrice) || 0,
+          qty: addQty,
+          variant: variant || ''
         });
       }
 
-      const variantSuffix = cleanVariant ? ` (${cleanVariant})` : '';
-      showToast(`+${qtyToAdd} ${unitLabel} ${prod.name}${variantSuffix} masuk keranjang`, "success");
+      showToast(`${prod.name}${variant ? ` (${variant})` : ''} +${addQty} pcs`, "success");
       renderPosCart();
     }
 
-    function updatePosCartQty(index, delta) {
-      const item = posCart[index];
-      if (!item) return;
-
-      const prod = appData.products.find(p => p.id === item.productId);
-      const unitType = item.unitType || 'pcs';
-      const unitLabel = unitType === 'karton' ? 'karton' : 'pcs';
-      const availableStock = prod ? (unitType === 'karton' ? (Number(prod.cartonStock) || 0) : (Number(prod.stock) || 0)) : 0;
-      const newQty = item.qty + delta;
-
-      if (newQty <= 0) {
-        posCart.splice(index, 1);
-      } else if (prod) {
-        const otherVariantsQty = posCart
-          .filter((c, i) => c.productId === item.productId && (c.unitType || 'pcs') === unitType && i !== index)
-          .reduce((sum, c) => sum + c.qty, 0);
-        if (otherVariantsQty + newQty > availableStock) {
-          showToast(`Maksimal total stok ${unitLabel} tersedia: ${availableStock} ${unitLabel}`, "warning");
-          return;
-        }
-        item.qty = newQty;
-      }
+    function openPosCartDrawer() {
       renderPosCart();
+      openModal('pos-cart-drawer');
     }
 
-    function setPosCartQtyDirect(index, rawVal) {
-      const item = posCart[index];
-      if (!item) return;
-      const prod = appData.products.find(p => p.id === item.productId);
-      const unitType = item.unitType || 'pcs';
-      const unitLabel = unitType === 'karton' ? 'karton' : 'pcs';
-      const availableStock = prod ? (unitType === 'karton' ? (Number(prod.cartonStock) || 0) : (Number(prod.stock) || 0)) : 0;
-      const val = parseInt(rawVal, 10);
-
-      if (isNaN(val) || val <= 0) {
-        posCart.splice(index, 1);
-      } else if (prod) {
-        const otherVariantsQty = posCart
-          .filter((c, i) => c.productId === item.productId && (c.unitType || 'pcs') === unitType && i !== index)
-          .reduce((sum, c) => sum + c.qty, 0);
-        const maxAllowed = Math.max(1, availableStock - otherVariantsQty);
-        if (val > maxAllowed) {
-          item.qty = maxAllowed;
-          showToast(`Maksimal stok ${unitLabel} tersedia: ${maxAllowed} ${unitLabel}`, "warning");
-        } else {
-          item.qty = val;
-        }
-      }
-      renderPosCart();
+    function closePosCartDrawer() {
+      closeModal('pos-cart-drawer');
     }
 
     function clearPosCart() {
       if (posCart.length === 0) return;
       posCart = [];
-      document.getElementById('pos-discount-input').value = '0';
-      document.getElementById('pos-cash-received').value = '';
+      const discInp = document.getElementById('pos-discount-input');
+      if (discInp) discInp.value = 0;
+      const cashInp = document.getElementById('pos-cash-received');
+      if (cashInp) cashInp.value = '';
       renderPosCart();
     }
-    function getPosCartTotals() {
-      const subtotal = posCart.reduce((sum, i) => sum + (i.price * i.qty), 0);
-      const rawDiscount = Math.max(0, Number(document.getElementById('pos-discount-input')?.value) || 0);
-      const discount = Math.min(rawDiscount, subtotal);
-      const grandTotal = Math.max(0, subtotal - discount);
-      return { subtotal, rawDiscount, discount, grandTotal };
+
+    function updatePosCartQty(idx, delta) {
+      const item = posCart[idx];
+      if (!item) return;
+      const prod = (appData.products || []).find(p => p.id === item.productId);
+      const maxStock = prod ? (Number(prod.stock) || 0) : item.qty;
+      const otherQty = posCart.reduce((sum, it, i) => (i !== idx && it.productId === item.productId ? sum + it.qty : sum), 0);
+      const nextQty = item.qty + delta;
+
+      if (nextQty <= 0) {
+        posCart.splice(idx, 1);
+      } else if (otherQty + nextQty > maxStock) {
+        showToast(`Maksimal stok tersedia ${maxStock} pcs.`, "warning");
+        return;
+      } else {
+        item.qty = nextQty;
+      }
+      renderPosCart();
+    }
+
+    function setPosCartQtyDirect(idx, val) {
+      const item = posCart[idx];
+      if (!item) return;
+      const parsed = Math.max(1, parseInt(val, 10) || 1);
+      const prod = (appData.products || []).find(p => p.id === item.productId);
+      const maxStock = prod ? (Number(prod.stock) || 0) : parsed;
+      const otherQty = posCart.reduce((sum, it, i) => (i !== idx && it.productId === item.productId ? sum + it.qty : sum), 0);
+
+      if (otherQty + parsed > maxStock) {
+        showToast(`Maksimal stok tersedia ${maxStock} pcs.`, "warning");
+        renderPosCart();
+        return;
+      }
+      item.qty = parsed;
+      renderPosCart();
     }
 
     function applyQuickDiscount(amount) {
-      const { subtotal } = getPosCartTotals();
-      if (subtotal <= 0) {
-        showToast("Tambahkan barang ke keranjang terlebih dahulu.", "warning");
-        return;
-      }
-      const inp = document.getElementById('pos-discount-input');
-      const cur = Math.max(0, Number(inp.value) || 0);
-      inp.value = Math.min(subtotal, cur + amount);
+      const discInp = document.getElementById('pos-discount-input');
+      if (!discInp) return;
+      const cur = Math.max(0, Number(discInp.value) || 0);
+      discInp.value = cur + (Number(amount) || 0);
       renderPosCartTotals();
     }
 
-    function renderPosCartTotals() {
-      const { subtotal, rawDiscount, discount, grandTotal } = getPosCartTotals();
+    function getPosCartTotals() {
+      const subtotal = posCart.reduce((sum, i) => sum + ((Number(i.price) || 0) * (Number(i.qty) || 0)), 0);
       const discInp = document.getElementById('pos-discount-input');
-      if (discInp && rawDiscount > subtotal) {
-        discInp.value = subtotal;
-      }
+      const rawDisc = Math.max(0, Number(discInp ? discInp.value : 0) || 0);
+      const discount = Math.min(rawDisc, subtotal);
+      const grandTotal = Math.max(0, subtotal - discount);
+      return { subtotal, discount, grandTotal };
+    }
+
+    function renderPosCartTotals() {
+      const { subtotal, discount, grandTotal } = getPosCartTotals();
       const subEl = document.getElementById('pos-subtotal-display');
-      const totalDisplay = document.getElementById('pos-total-display');
-      const floatTotal = document.getElementById('pos-float-total');
+      const totEl = document.getElementById('pos-total-display');
+      const floatTot = document.getElementById('pos-float-total');
       if (subEl) subEl.textContent = formatRupiah(subtotal);
-      if (totalDisplay) totalDisplay.textContent = formatRupiah(grandTotal);
-      if (floatTotal) floatTotal.textContent = formatRupiah(grandTotal);
+      if (totEl) totEl.textContent = formatRupiah(grandTotal);
+      if (floatTot) floatTot.textContent = formatRupiah(grandTotal);
       calculatePosChange();
+    }
+
+    function togglePosDebtFields() {
+      const status = document.getElementById('pos-payment-status').value;
+      const debtBox = document.getElementById('pos-debt-fields');
+      const cashSec = document.getElementById('pos-cash-section');
+      if (status === 'Hutang') {
+        debtBox.classList.remove('hidden');
+        cashSec.classList.add('hidden');
+      } else {
+        debtBox.classList.add('hidden');
+        cashSec.classList.remove('hidden');
+      }
+      calculatePosChange();
+    }
+
+    function setExactCash() {
+      const { grandTotal } = getPosCartTotals();
+      const inp = document.getElementById('pos-cash-received');
+      if (inp) inp.value = grandTotal;
+      calculatePosChange();
+    }
+
+    function addCashQuick(amount) {
+      const inp = document.getElementById('pos-cash-received');
+      if (!inp) return;
+      inp.value = (Number(inp.value) || 0) + (Number(amount) || 0);
+      calculatePosChange();
+    }
+
+    function calculatePosChange() {
+      const { grandTotal } = getPosCartTotals();
+      const status = document.getElementById('pos-payment-status').value;
+      const cashInp = document.getElementById('pos-cash-received');
+      const changeEl = document.getElementById('pos-change-display');
+      const cash = Math.max(0, Number(cashInp ? cashInp.value : 0) || 0);
+      const change = status === 'Hutang' ? 0 : Math.max(0, cash - grandTotal);
+      if (changeEl) {
+        changeEl.textContent = formatRupiah(change);
+        changeEl.className = cash < grandTotal && status !== 'Hutang' && cash > 0
+          ? 'text-sm font-black text-rose-600'
+          : 'text-sm font-black text-emerald-600';
+      }
     }
 
     function renderPosCart() {
@@ -2501,229 +2637,149 @@
       const floatBadge = document.getElementById('pos-float-badge');
       const floatSubtitle = document.getElementById('pos-float-subtitle');
 
-      const totalPcsInCart = posCart.filter(i => (i.unitType || 'pcs') === 'pcs').reduce((sum, i) => sum + i.qty, 0);
-      const totalKartonInCart = posCart.filter(i => i.unitType === 'karton').reduce((sum, i) => sum + i.qty, 0);
-      const totalItems = posCart.reduce((sum, i) => sum + i.qty, 0);
+      const totalItems = posCart.reduce((sum, i) => sum + (Number(i.qty) || 0), 0);
+      const { grandTotal } = getPosCartTotals();
 
-      const summaryParts = [];
-      if (totalPcsInCart > 0) summaryParts.push(`${totalPcsInCart} pcs`);
-      if (totalKartonInCart > 0) summaryParts.push(`${totalKartonInCart} karton`);
-      const summaryLabel = summaryParts.length > 0 ? summaryParts.join(' + ') : '0 item';
-
-      subtitle.textContent = `${summaryLabel} dipilih`;
+      if (subtitle) subtitle.textContent = `${totalItems} pcs dipilih`;
       if (floatBadge) floatBadge.textContent = totalItems;
-      if (floatSubtitle) floatSubtitle.textContent = totalItems > 0 ? `Keranjang (${summaryLabel})` : 'Keranjang Belanja Kosong';
+      if (floatSubtitle) floatSubtitle.textContent = totalItems > 0 ? `Keranjang Belanja (${totalItems} pcs)` : 'Keranjang Belanja';
 
-      if (posCart.length === 0) {
-        const discInp = document.getElementById('pos-discount-input');
-        if (discInp) discInp.value = '0';
-        container.innerHTML = `
-          <div class="h-full flex flex-col items-center justify-center text-center py-10 px-4">
-            <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-2">
-              ${icon('cart', 'w-6 h-6')}
-            </div>
-            <p class="text-xs font-extrabold text-slate-600">Keranjang masih kosong</p>
-            <p class="text-[11px] text-slate-400 mt-0.5">Klik produk di katalog atau scan barcode untuk memulai transaksi.</p>
-          </div>
-        `;
-      } else {
-        container.innerHTML = posCart.map((item, idx) => {
-          const unitBadge = (item.unitType || 'pcs') === 'karton' ? 'karton' : 'pcs';
-          return `
-            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center justify-between gap-2.5">
-              <div class="flex-1 min-w-0">
-                <p class="text-xs font-extrabold text-slate-800 truncate">${item.name}</p>
-                ${item.variant ? `<span class="inline-block mt-0.5 px-1.5 py-0.5 ${unitBadge === 'karton' ? 'bg-navy-600 text-gold-400' : 'bg-gold-100 text-navy-900'} rounded text-[10px] font-bold">${item.variant}</span>` : ''}
-                <p class="text-[11px] text-slate-500 mt-0.5">${formatRupiah(item.price)} x ${item.qty} ${unitBadge} = <b class="text-navy-600">${formatRupiah(item.price * item.qty)}</b></p>
+      if (container) {
+        if (posCart.length === 0) {
+          container.innerHTML = `
+            <div class="h-full flex flex-col items-center justify-center text-center py-10 px-4">
+              <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-2">
+                ${icon('cart', 'w-6 h-6')}
               </div>
-              <div class="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shrink-0">
-                <button onclick="updatePosCartQty(${idx}, -1)" class="w-6 h-6 rounded-md bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-600 font-bold text-xs flex items-center justify-center">-</button>
-                <input type="number" min="1" value="${item.qty}" onchange="setPosCartQtyDirect(${idx}, this.value)" class="w-9 text-center text-xs font-extrabold text-slate-800 focus:outline-none">
-                <button onclick="updatePosCartQty(${idx}, 1)" class="w-6 h-6 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-600 font-bold text-xs flex items-center justify-center">+</button>
-              </div>
+              <p class="text-xs font-extrabold text-slate-600">Keranjang masih kosong</p>
+              <p class="text-[11px] text-slate-400 mt-0.5">Klik produk di katalog atau scan barcode untuk memulai transaksi.</p>
             </div>
           `;
-        }).join('');
+        } else {
+          container.innerHTML = posCart.map((item, idx) => {
+            const prod = (appData.products || []).find(p => p.id === item.productId);
+            const packSize = prod ? (Number(prod.packSize) || 1) : 1;
+            const remainingStock = prod ? (Number(prod.stock) || 0) : 0;
+            const cartonBreakdown = (packSize > 1 && item.qty >= packSize)
+              ? ` (${formatStockWithCarton(item.qty, packSize)})`
+              : '';
+
+            return `
+              <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs font-extrabold text-slate-800 truncate">${item.name}</p>
+                    ${item.variant ? `<span class="inline-block mt-0.5 px-1.5 py-0.5 bg-gold-100 text-navy-900 rounded text-[10px] font-bold">${item.variant}</span>` : ''}
+                    <p class="text-[11px] text-slate-500 mt-0.5">${formatRupiah(item.price)} x ${item.qty} pcs${cartonBreakdown} = <b class="text-navy-600">${formatRupiah(item.price * item.qty)}</b></p>
+                    <p class="text-[10px] text-slate-400">Sisa stok toko: ${formatStockWithCarton(remainingStock, packSize, prod ? prod.cartonStock : null)}</p>
+                  </div>
+                  <div class="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 shrink-0">
+                    <button type="button" onclick="updatePosCartQty(${idx}, -1)" class="w-6 h-6 rounded-md bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-600 font-bold text-xs flex items-center justify-center">-</button>
+                    <input type="number" min="1" value="${item.qty}" onchange="setPosCartQtyDirect(${idx}, this.value)" class="w-9 text-center text-xs font-extrabold text-slate-800 focus:outline-none">
+                    <button type="button" onclick="updatePosCartQty(${idx}, 1)" class="w-6 h-6 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-600 font-bold text-xs flex items-center justify-center">+</button>
+                  </div>
+                </div>
+                ${packSize > 1 ? `
+                  <div class="flex items-center justify-between pt-1.5 border-t border-slate-200/60">
+                    <span class="text-[10px] font-bold text-slate-500">1 Karton = ${packSize} pcs</span>
+                    <button type="button" onclick="updatePosCartQty(${idx}, ${packSize})" class="px-2 py-0.5 bg-navy-600 hover:bg-navy-700 text-gold-400 rounded text-[10px] font-extrabold transition">
+                      +1 Karton (${packSize} pcs)
+                    </button>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('');
+        }
       }
 
       renderPosCartTotals();
     }
 
-    function openPosCartDrawer() {
-      const drawer = document.getElementById('pos-cart-drawer');
-      if (!drawer) return;
-      renderPosCart();
-      drawer.classList.remove('hidden');
-      drawer.classList.add('flex');
-    }
-
-    function closePosCartDrawer() {
-      const drawer = document.getElementById('pos-cart-drawer');
-      if (!drawer) return;
-      drawer.classList.add('hidden');
-      drawer.classList.remove('flex');
-    }
-
-    function togglePosDebtFields() {
-      const status = document.getElementById('pos-payment-status').value;
-      const box = document.getElementById('pos-debt-fields');
-      if (status === 'Hutang') {
-        box.classList.remove('hidden');
-      } else {
-        box.classList.add('hidden');
-      }
-      calculatePosChange();
-    }
-
-    function setExactCash() {
-      const { grandTotal } = getPosCartTotals();
-      document.getElementById('pos-cash-received').value = grandTotal;
-      calculatePosChange();
-    }
-
-    function addCashQuick(amount) {
-      const cur = Number(document.getElementById('pos-cash-received').value) || 0;
-      document.getElementById('pos-cash-received').value = cur + amount;
-      calculatePosChange();
-    }
-
-    function calculatePosChange() {
-      const { grandTotal } = getPosCartTotals();
-      const cash = Number(document.getElementById('pos-cash-received').value) || 0;
-      const change = cash - grandTotal;
-      const display = document.getElementById('pos-change-display');
-
-      if (change >= 0) {
-        display.textContent = formatRupiah(change);
-        display.className = "text-sm font-black text-emerald-600";
-      } else {
-        display.textContent = `Kurang ${formatRupiah(Math.abs(change))}`;
-        display.className = "text-xs font-black text-rose-600";
-      }
-    }
-
     function processCheckout() {
       if (posCart.length === 0) {
-        showToast("Keranjang belanja masih kosong!", "error");
+        showToast("Keranjang belanja masih kosong!", "warning");
         return;
       }
 
       const { subtotal, discount, grandTotal } = getPosCartTotals();
       const method = document.getElementById('pos-payment-method').value;
       const status = document.getElementById('pos-payment-status').value;
-      const cashReceived = Number(document.getElementById('pos-cash-received').value) || 0;
-      const customerName = document.getElementById('pos-debt-name').value.trim();
-      const customerWa = document.getElementById('pos-debt-wa').value.trim();
+      const cashReceived = status === 'Hutang' ? 0 : Math.max(0, Number(document.getElementById('pos-cash-received').value) || 0);
 
-      if (status === 'Lunas' && cashReceived < grandTotal) {
-        showToast("Uang diterima kurang dari total belanja setelah diskon!", "error");
+      let debtCustomerName = '';
+      let debtCustomerWa = '';
+      if (status === 'Hutang') {
+        debtCustomerName = document.getElementById('pos-debt-name').value.trim();
+        debtCustomerWa = document.getElementById('pos-debt-wa').value.trim();
+        if (!debtCustomerName) {
+          showToast("Nama pelanggan wajib diisi untuk transaksi Hutang!", "error");
+          return;
+        }
+      } else if (cashReceived < grandTotal) {
+        showToast("Uang diterima kurang dari total belanja!", "error");
         return;
       }
 
-      if (status === 'Hutang' && !customerName) {
-        showToast("Nama pelanggan wajib diisi untuk transaksi Hutang!", "error");
-        document.getElementById('pos-debt-name').focus();
-        return;
-      }
-
+      // Potong stok pcs produk
       posCart.forEach(item => {
-        const prod = appData.products.find(p => p.id === item.productId);
+        const prod = (appData.products || []).find(p => p.id === item.productId);
         if (prod) {
-          const isCarton = (item.unitType || 'pcs') === 'karton';
-          if (isCarton) {
-            prod.cartonStock = Math.max(0, (Number(prod.cartonStock) || 0) - item.qty);
-          } else {
-            prod.stock = Math.max(0, (Number(prod.stock) || 0) - item.qty);
-          }
-
-          if (Array.isArray(prod.barcodes) && item.rawVariant) {
-            const vRow = prod.barcodes.find(b => (b.variant || '').trim() === item.rawVariant);
-            if (vRow) {
-              if (isCarton) {
-                vRow.cartonQty = Math.max(0, (Number(vRow.cartonQty) || 0) - item.qty);
-              } else {
-                vRow.qty = Math.max(0, (Number(vRow.qty) || 0) - item.qty);
-              }
-            }
-          }
+          prod.stock = Math.max(0, (Number(prod.stock) || 0) - (Number(item.qty) || 0));
         }
       });
 
-      const change = status === 'Lunas' ? Math.max(0, cashReceived - grandTotal) : 0;
       const trxId = `TRX-${Date.now().toString().slice(-6)}`;
       const nowIso = new Date().toISOString();
-      const todayDate = nowIso.split('T')[0];
+      const change = status === 'Hutang' ? 0 : Math.max(0, cashReceived - grandTotal);
 
-      const newTrx = {
+      const trxRecord = {
         id: trxId,
         date: nowIso,
         cashier: currentUser ? currentUser.name : 'Kasir',
-        items: posCart.map(i => ({
-          productId: i.productId,
-          name: i.name,
-          variant: i.variant || '',
-          unitType: i.unitType || 'pcs',
-          qty: i.qty,
-          price: i.price,
-          subtotal: i.price * i.qty
-        })),
-        subtotal: subtotal,
-        discount: discount,
+        method,
+        status,
+        customerName: debtCustomerName,
+        customerWa: debtCustomerWa,
+        items: posCart.map(i => ({ ...i })),
+        subtotal,
+        discount,
         total: grandTotal,
-        paymentMethod: method,
-        status: status,
-        cashReceived: cashReceived,
-        change: change,
-        customerName: customerName
+        cashReceived: status === 'Hutang' ? 0 : cashReceived,
+        change
       };
 
-      appData.transactions.unshift(newTrx);
+      appData.transactions.unshift(trxRecord);
 
       if (status === 'Lunas') {
         appData.financeLogs.unshift({
           id: `FIN-${Date.now()}`,
-          date: todayDate,
+          date: nowIso.split('T')[0],
           type: 'IN',
           category: 'Penjualan Kasir',
-          description: `Penjualan Kasir #${trxId} (${method})${discount > 0 ? ` [Diskon ${formatRupiah(discount)}]` : ''}`,
+          description: `Penjualan ${trxId} (${method})${discount > 0 ? ` - Diskon ${formatRupiah(discount)}` : ''}`,
           amount: grandTotal,
           isAuto: true
         });
       } else {
-        const dp = Math.min(cashReceived, grandTotal);
-        const remainingDebt = grandTotal - dp;
-
-        if (dp > 0) {
-          appData.financeLogs.unshift({
-            id: `FIN-${Date.now()}-DP`,
-            date: todayDate,
-            type: 'IN',
-            category: 'DP Penjualan',
-            description: `DP Transaksi Hutang #${trxId} (${customerName})`,
-            amount: dp,
-            isAuto: true
-          });
-        }
-
-        const itemSummary = posCart.map(i => `${i.name}${i.variant ? ` [${i.variant}]` : ''} (${i.qty}x)`).join(', ');
         appData.debts.unshift({
           id: `DBT-${Date.now()}`,
-          customerName: customerName,
-          customerWa: customerWa,
-          note: `Nota #${trxId}: ${itemSummary}${discount > 0 ? ` (Diskon ${formatRupiah(discount)})` : ''}`,
+          customerName: debtCustomerName,
+          customerWa: debtCustomerWa,
+          note: `Nota ${trxId}: ${posCart.map(i => `${i.name} (${i.qty} pcs)`).join(', ')}`,
           amount: grandTotal,
-          paidAmount: dp,
-          date: todayDate,
-          status: remainingDebt <= 0 ? 'LUNAS' : 'BELUM LUNAS'
+          paidAmount: 0,
+          date: nowIso.split('T')[0],
+          status: 'BELUM LUNAS'
         });
       }
 
       saveAppData();
       closePosCartDrawer();
-      showReceiptModal(newTrx);
+      openReceiptModal(trxRecord);
 
       posCart = [];
-      document.getElementById('pos-discount-input').value = '0';
+      document.getElementById('pos-discount-input').value = 0;
       document.getElementById('pos-cash-received').value = '';
       document.getElementById('pos-debt-name').value = '';
       document.getElementById('pos-debt-wa').value = '';
@@ -2733,17 +2789,17 @@
       renderPosCart();
     }
 
-    function showReceiptModal(trx) {
-      const s = appData.settings;
+    function openReceiptModal(trx) {
+      const s = appData.settings || defaultData.settings;
       document.getElementById('rec-logo-box').innerHTML = getStoreLogoHTML(s.logo);
-      document.getElementById('rec-store-name').textContent = s.storeName;
-      document.getElementById('rec-store-slogan').textContent = s.slogan;
-      document.getElementById('rec-store-address').textContent = s.address;
+      document.getElementById('rec-store-name').textContent = s.storeName || "Vee's Shop";
+      document.getElementById('rec-store-slogan').textContent = s.slogan || "Bright Choice for Daily Needs";
+      document.getElementById('rec-store-address').textContent = s.address || "";
 
       document.getElementById('rec-id').textContent = `#${trx.id}`;
       document.getElementById('rec-date').textContent = formatDateTimeIndo(trx.date);
-      document.getElementById('rec-cashier').textContent = trx.cashier;
-      document.getElementById('rec-method').textContent = trx.paymentMethod;
+      document.getElementById('rec-cashier').textContent = trx.cashier || '-';
+      document.getElementById('rec-method').textContent = trx.method || 'Offline';
 
       const custRow = document.getElementById('rec-customer-row');
       if (trx.customerName) {
@@ -2755,36 +2811,37 @@
         custRow.classList.remove('flex');
       }
 
-      document.getElementById('rec-items').innerHTML = trx.items.map(item => `
+      document.getElementById('rec-items').innerHTML = (trx.items || []).map(it => `
         <div>
-          <div class="font-bold">${item.name}</div>
-          ${item.variant ? `<div class="text-[10px] font-semibold text-slate-700">Jenis/Varian: ${item.variant}</div>` : ''}
-          <div class="flex justify-between text-[11px] text-slate-700">
-            <span>${item.qty} ${item.unitType === 'karton' ? 'karton' : 'pcs'} x ${formatRupiah(item.price)}</span>
-            <span class="font-bold">${formatRupiah(item.subtotal)}</span>
+          <div class="font-bold">${it.name}${it.variant ? ` (${it.variant})` : ''}</div>
+          <div class="flex justify-between text-[10px] text-slate-600">
+            <span>${it.qty} pcs x ${formatRupiah(it.price)}</span>
+            <span class="font-bold text-slate-900">${formatRupiah(it.qty * it.price)}</span>
           </div>
         </div>
       `).join('');
 
-      const subVal = trx.subtotal ?? trx.total;
-      const discVal = trx.discount ?? 0;
-      document.getElementById('rec-subtotal').textContent = formatRupiah(subVal);
+      document.getElementById('rec-subtotal').textContent = formatRupiah(trx.subtotal || trx.total);
       const discRow = document.getElementById('rec-discount-row');
-      if (discVal > 0) {
+      if ((trx.discount || 0) > 0) {
         discRow.classList.remove('hidden');
         discRow.classList.add('flex');
-        document.getElementById('rec-discount').textContent = `- ${formatRupiah(discVal)}`;
+        document.getElementById('rec-discount').textContent = `- ${formatRupiah(trx.discount)}`;
       } else {
         discRow.classList.add('hidden');
         discRow.classList.remove('flex');
       }
 
       document.getElementById('rec-total').textContent = formatRupiah(trx.total);
-      document.getElementById('rec-status').textContent = trx.status.toUpperCase();
-      document.getElementById('rec-cash').textContent = formatRupiah(trx.cashReceived);
-      document.getElementById('rec-change').textContent = formatRupiah(trx.change);
+      document.getElementById('rec-status').textContent = (trx.status || 'LUNAS').toUpperCase();
+      document.getElementById('rec-cash').textContent = formatRupiah(trx.cashReceived || 0);
+      document.getElementById('rec-change').textContent = formatRupiah(trx.change || 0);
 
       openModal('modal-receipt');
+    }
+
+    function closeReceiptModal() {
+      closeModal('modal-receipt');
     }
 
     function printThermalReceipt() {
@@ -2795,48 +2852,44 @@
       }, 500);
     }
 
-    function closeReceiptModal() {
-      closeModal('modal-receipt');
-      showToast("Transaksi selesai!", "success");
-    }
-
     function openBarcodeSimulatorModal() {
       const list = document.getElementById('barcode-sim-list');
-      const allBarcodes = [];
-      appData.products.forEach(p => {
+      const rows = [];
+      (appData.products || []).forEach(p => {
         (p.barcodes || []).forEach(b => {
           if ((b.code || '').trim()) {
-            allBarcodes.push({ product: p, code: b.code, variant: b.variant || '' });
+            rows.push({ code: b.code.trim(), variant: (b.variant || '').trim(), prod: p });
           }
         });
       });
 
-      if (allBarcodes.length === 0) {
-        list.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">Belum ada barcode terdaftar pada produk.</p>`;
+      if (rows.length === 0) {
+        list.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Belum ada kode barcode yang terdaftar pada produk.</p>`;
       } else {
-        list.innerHTML = allBarcodes.map(item => `
-          <button onclick="simulateScan('${item.code.replace(/'/g, "\\'")}')" class="w-full p-3 bg-slate-50 hover:bg-navy-50 border border-slate-200 hover:border-navy-300 rounded-xl flex items-center justify-between text-left transition">
+        list.innerHTML = rows.map(r => `
+          <button type="button" onclick="simulateBarcodeScan('${r.code.replace(/'/g, "\\'")}')" class="w-full p-3 bg-slate-50 hover:bg-navy-50 border border-slate-200 rounded-xl flex items-center justify-between text-left transition">
             <div>
-              <p class="text-xs font-extrabold text-slate-800">${item.product.name}</p>
-              ${item.variant ? `<span class="inline-block mt-0.5 px-2 py-0.5 bg-gold-100 text-navy-900 rounded text-[10px] font-extrabold">${item.variant}</span>` : ''}
-              <p class="text-[11px] font-mono text-navy-600 mt-0.5">${item.code}</p>
+              <p class="text-xs font-extrabold text-slate-900">${r.prod.name}${r.variant ? ` (${r.variant})` : ''}</p>
+              <p class="text-[11px] font-mono text-slate-500">${r.code}</p>
             </div>
-            <span class="px-2.5 py-1 bg-navy-600 text-gold-400 rounded-lg text-[11px] font-extrabold shrink-0">+1 Pcs</span>
+            <span class="px-2.5 py-1 bg-navy-600 text-gold-400 rounded-lg text-[10px] font-extrabold">${formatRupiah(r.prod.sellPrice)}</span>
           </button>
         `).join('');
       }
       openModal('modal-barcode-sim');
     }
 
-    function simulateScan(code) {
-      closeModal('modal-barcode-sim');
+    function simulateBarcodeScan(code) {
       const matched = findProductByBarcode(code);
       if (matched) {
         addToPosCart(matched.product.id, 1, matched.variant);
+        closeModal('modal-barcode-sim');
+      } else {
+        showToast("Barcode tidak ditemukan!", "warning");
       }
     }
 
-    // ==================== 9. MENU 2: BARANG (FORM VARIAN LENGKAP) ====================
+    // ==================== 9. MENU 2: MANAJEMEN BARANG & VARIAN ====================
     function setProductFilterTab(tab) {
       productFilterTab = tab;
       document.querySelectorAll('.prod-filter-tab').forEach(btn => {
@@ -2844,110 +2897,102 @@
         btn.classList.add('bg-slate-100', 'text-slate-600');
       });
       const active = document.getElementById(`prod-tab-${tab}`);
-      active.classList.remove('bg-slate-100', 'text-slate-600');
-      active.classList.add('bg-navy-600', 'text-white');
+      if (active) {
+        active.classList.remove('bg-slate-100', 'text-slate-600');
+        active.classList.add('bg-navy-600', 'text-white');
+      }
 
       const catBox = document.getElementById('prod-category-filter-box');
-      if (tab === 'CATEGORY') {
-        catBox.classList.remove('hidden');
-        populateProductCategoryDropdown();
-      } else {
-        catBox.classList.add('hidden');
+      if (catBox) {
+        catBox.classList.toggle('hidden', tab !== 'CATEGORY');
       }
       renderProductList();
     }
 
-    function populateProductCategoryDropdown() {
-      const categories = [...new Set((appData.products || []).map(p => p.category).filter(Boolean))];
-      const sel = document.getElementById('prod-category-select');
-      if (!sel) return;
-      const current = sel.value || 'ALL';
-      sel.innerHTML = `<option value="ALL">Semua Kategori</option>` +
-        categories.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
-    }
-
     function renderProductList() {
-      const search = (document.getElementById('prod-search-input').value || '').toLowerCase().trim();
+      const listEl = document.getElementById('product-management-list');
+      if (!listEl) return;
+
+      const allProds = appData.products || [];
+      const lowProds = allProds.filter(p => (Number(p.stock) || 0) <= (Number(p.minStock) || 5));
+
+      const countAll = document.getElementById('count-prod-all');
+      const countLow = document.getElementById('count-prod-low');
+      if (countAll) countAll.textContent = allProds.length;
+      if (countLow) countLow.textContent = lowProds.length;
+
       const catSelect = document.getElementById('prod-category-select');
-      const catFilter = catSelect ? (catSelect.value || 'ALL') : 'ALL';
+      if (catSelect) {
+        const prevCat = catSelect.value || 'ALL';
+        const cats = ['ALL', ...new Set(allProds.map(p => p.category).filter(Boolean))];
+        catSelect.innerHTML = cats.map(c => `<option value="${c}">${c === 'ALL' ? 'Semua Kategori' : c}</option>`).join('');
+        catSelect.value = cats.includes(prevCat) ? prevCat : 'ALL';
+      }
 
-      const lowStockCount = (appData.products || []).filter(p => p.stock <= p.minStock).length;
-      document.getElementById('count-prod-all').textContent = (appData.products || []).length;
-      document.getElementById('count-prod-low').textContent = lowStockCount;
+      const search = ((document.getElementById('prod-search-input') && document.getElementById('prod-search-input').value) || '').toLowerCase().trim();
+      const selectedCat = catSelect ? catSelect.value : 'ALL';
 
-      const filtered = appData.products.filter(p => {
-        if (productFilterTab === 'LOW_STOCK' && p.stock > p.minStock) return false;
-        if (productFilterTab === 'CATEGORY' && catFilter !== 'ALL' && p.category !== catFilter) return false;
-
-        const matchName = p.name.toLowerCase().includes(search);
-        const matchBc = (p.barcodes || []).some(b =>
-          b.code.toLowerCase().includes(search) || (b.variant || '').toLowerCase().includes(search)
-        );
-        return matchName || matchBc;
+      const filtered = allProds.filter(p => {
+        if (productFilterTab === 'LOW_STOCK' && (Number(p.stock) || 0) > (Number(p.minStock) || 5)) return false;
+        if (productFilterTab === 'CATEGORY' && selectedCat !== 'ALL' && p.category !== selectedCat) return false;
+        if (!search) return true;
+        return (p.name || '').toLowerCase().includes(search) ||
+          (p.category || '').toLowerCase().includes(search) ||
+          (p.barcodes || []).some(b => (b.code || '').toLowerCase().includes(search) || (b.variant || '').toLowerCase().includes(search));
       });
 
-      const container = document.getElementById('product-management-list');
       if (filtered.length === 0) {
-        container.innerHTML = `
-          <div class="col-span-full bg-white p-10 rounded-2xl border border-slate-200 text-center">
-            <div class="text-slate-300 flex justify-center mb-3">${icon('box', 'w-10 h-10')}</div>
-            <p class="text-sm font-bold text-slate-700">Tidak ada barang pada filter ini</p>
-          </div>
-        `;
+        listEl.innerHTML = `<div class="col-span-full bg-white p-8 rounded-2xl border border-slate-200 text-center text-xs font-bold text-slate-500">Belum ada data barang yang sesuai.</div>`;
         return;
       }
 
-      container.innerHTML = filtered.map(p => {
-        const thumb = (p.images && p.images[0]) ? p.images[0] : 'https://placehold.co/200x200/f1f5f9/64748b?text=Produk';
-        const isLow = p.stock <= p.minStock;
+      listEl.innerHTML = filtered.map(p => {
+        const imgs = (p.images && p.images.length > 0) ? p.images : ['https://placehold.co/300x300/f1f5f9/64748b?text=Produk'];
+        const curIdx = activeCardImageIndex[p.id] || 0;
+        const mainImg = imgs[curIdx % imgs.length];
+        const isLow = (Number(p.stock) || 0) <= (Number(p.minStock) || 5);
         const packSize = Number(p.packSize) || 1;
-        const stockLabel = formatStockWithCarton(p.stock, packSize, p.cartonStock);
-        const bcBadges = (p.barcodes || []).map(b => {
-          const varTxt = (b.variant || '').trim() ? ` - ${b.variant.trim()}` : '';
-          const ktnTxt = (Number(b.cartonQty) || 0) > 0 ? `, ${b.cartonQty} ktn` : '';
-          return `<span class="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200/80 rounded text-[10px] font-mono"><b class="text-navy-700">${b.code || '-'}</b>${varTxt} (${b.qty || 0} pcs${ktnTxt})</span>`;
-        }).join(' ');
 
         return `
-          <div class="bg-white rounded-2xl border ${isLow ? 'border-rose-300 ring-1 ring-rose-100' : 'border-slate-200/90'} p-4 shadow-sm flex flex-col justify-between gap-4">
+          <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 flex flex-col justify-between gap-3">
             <div class="flex gap-3.5">
-              <div class="relative w-20 h-20 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200">
-                <img src="${thumb}" alt="${p.name}" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/200x200/f1f5f9/64748b?text=Produk'">
-                ${(p.images && p.images.length > 1) ? `<span class="absolute bottom-1 right-1 px-1.5 py-0.5 bg-navy-900/80 text-gold-400 text-[9px] font-extrabold rounded">+${p.images.length - 1}</span>` : ''}
+              <div class="relative w-20 h-20 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
+                <img src="${mainImg}" alt="${p.name}" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/300x300/f1f5f9/64748b?text=Produk';">
+                ${imgs.length > 1 ? `
+                  <button type="button" onclick="cycleCardImage('${p.id}', ${imgs.length})" class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-navy-900/80 text-white text-[9px] font-bold">${(curIdx % imgs.length) + 1}/${imgs.length}</button>
+                ` : ''}
               </div>
               <div class="flex-1 min-w-0">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="text-[10px] font-extrabold uppercase tracking-wider text-gold-600">${p.category}</span>
+                <div class="flex items-center justify-between gap-1.5">
+                  <span class="text-[10px] font-extrabold text-gold-600 uppercase truncate">${p.category || 'Umum'}</span>
                   <span class="px-2 py-0.5 rounded-full text-[10px] font-black ${isLow ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
-                    Stok: ${stockLabel}
+                    ${formatStockWithCarton(p.stock, packSize, p.cartonStock)}
                   </span>
                 </div>
                 <h3 class="font-extrabold text-slate-900 text-sm truncate mt-0.5">${p.name}</h3>
-                <div class="grid grid-cols-2 gap-2 mt-2 text-xs">
-                  <div class="bg-slate-50 px-2 py-1 rounded-lg">
-                    <span class="block text-[10px] text-slate-400">Harga Beli</span>
-                    <span class="font-bold text-slate-700">${formatRupiah(p.buyPrice)}</span>
-                  </div>
-                  <div class="bg-navy-50/80 px-2 py-1 rounded-lg">
-                    <span class="block text-[10px] text-navy-500">Harga Jual</span>
-                    <span class="font-black text-navy-700">${formatRupiah(p.sellPrice)}</span>
-                  </div>
+                <div class="flex items-center gap-3 mt-1 text-xs">
+                  <span class="text-slate-500">Beli: <b>${formatRupiah(p.buyPrice)}</b></span>
+                  <span class="text-navy-600">Jual: <b>${formatRupiah(p.sellPrice)}</b></span>
                 </div>
+                ${(p.barcodes && p.barcodes.length > 0) ? `
+                  <div class="flex flex-wrap gap-1 mt-1.5">
+                    ${p.barcodes.map(b => `<span class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-semibold">${b.variant || 'Varian'}: ${Number(b.qty) || 0} pcs, ${Number(b.cartonQty) || 0} ktn</span>`).join('')}
+                  </div>
+                ` : ''}
               </div>
             </div>
 
             <div class="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-              <div class="flex flex-wrap gap-1 overflow-y-auto max-h-14">
-                ${bcBadges || '<span class="text-[10px] text-slate-400">Tanpa varian/barcode</span>'}
-              </div>
-              <div class="flex items-center gap-1.5 shrink-0">
-                <button onclick="openShareProductModal('${p.id}')" title="Bagikan Link Produk" class="w-8 h-8 bg-gold-50 hover:bg-gold-200 text-gold-600 rounded-lg flex items-center justify-center transition">
-                  ${icon('share', 'w-3.5 h-3.5')}
-                </button>
-                <button onclick="openProductModal('${p.id}')" title="Edit Produk" class="w-8 h-8 bg-navy-50 hover:bg-navy-100 text-navy-600 rounded-lg flex items-center justify-center transition">
+              <button type="button" onclick="openShareProductModal('${p.id}')" class="px-2.5 py-1.5 bg-gold-50 hover:bg-gold-100 text-navy-800 border border-gold-300 rounded-xl text-[11px] font-extrabold flex items-center gap-1 transition">
+                ${icon('share', 'w-3.5 h-3.5')}
+                <span>Bagikan</span>
+              </button>
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="openProductModal('${p.id}')" class="px-3 py-1.5 bg-navy-50 hover:bg-navy-100 text-navy-700 rounded-xl text-[11px] font-extrabold flex items-center gap-1 transition">
                   ${icon('edit', 'w-3.5 h-3.5')}
+                  <span>Edit</span>
                 </button>
-                <button onclick="deleteProduct('${p.id}')" title="Hapus Produk" class="w-8 h-8 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg flex items-center justify-center transition">
+                <button type="button" onclick="deleteProduct('${p.id}')" class="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition" title="Hapus Barang">
                   ${icon('trash', 'w-3.5 h-3.5')}
                 </button>
               </div>
@@ -2957,347 +3002,307 @@
       }).join('');
     }
 
-    function recalculateVariantTotals() {
-      const pcsList = [];
-      const kartonList = [];
-      let totalPcs = 0;
-      let totalKarton = 0;
+    function cycleCardImage(productId, totalImgs) {
+      activeCardImageIndex[productId] = ((activeCardImageIndex[productId] || 0) + 1) % totalImgs;
+      renderProductList();
+    }
 
-      document.querySelectorAll('#barcode-rows-container .barcode-row').forEach(row => {
-        const pcsVal = Math.max(0, parseInt(row.querySelector('.bc-qty-input')?.value, 10) || 0);
-        const ktnVal = Math.max(0, parseInt(row.querySelector('.bc-carton-input')?.value, 10) || 0);
-        pcsList.push(pcsVal);
-        kartonList.push(ktnVal);
-        totalPcs += pcsVal;
-        totalKarton += ktnVal;
+    function deleteProduct(productId) {
+      const prod = (appData.products || []).find(p => p.id === productId);
+      if (!prod) return;
+      customConfirm("Hapus Barang", `Hapus produk "${prod.name}" dari daftar inventaris?`, () => {
+        appData.products = (appData.products || []).filter(p => p.id !== productId);
+        saveAppData();
+        renderProductList();
+        renderPosCatalog();
+        showToast("Produk dihapus.", "info");
       });
+    }
 
-      const sumPcsEl = document.getElementById('summary-total-pcs');
-      const breakPcsEl = document.getElementById('summary-breakdown-pcs');
-      const sumKtnEl = document.getElementById('summary-total-karton');
-      const breakKtnEl = document.getElementById('summary-breakdown-karton');
-      const hiddenStockEl = document.getElementById('prod-stock');
-      const hiddenCartonEl = document.getElementById('prod-carton-stock');
-
-      if (sumPcsEl) sumPcsEl.textContent = totalPcs;
-      if (breakPcsEl) breakPcsEl.textContent = pcsList.length > 0 ? `(${pcsList.join(' + ')})` : '(0)';
-      if (sumKtnEl) sumKtnEl.textContent = totalKarton;
-      if (breakKtnEl) breakKtnEl.textContent = kartonList.length > 0 ? `(${kartonList.join(' + ')})` : '(0)';
-      if (hiddenStockEl) hiddenStockEl.value = totalPcs;
-      if (hiddenCartonEl) hiddenCartonEl.value = totalKarton;
-
-      return { totalPcs, totalKarton };
+    function refreshCategoryDatalist() {
+      const dl = document.getElementById('category-datalist');
+      if (!dl) return;
+      const cats = [...new Set(['Minuman', 'Makanan', 'Sembako', 'Perawatan', ...(appData.products || []).map(p => p.category).filter(Boolean)])];
+      dl.innerHTML = cats.map(c => `<option value="${c}">`).join('');
     }
 
     function setMainProductPhotoPreview(src) {
-      const imgEl = document.getElementById('prod-main-photo-preview');
-      const phEl = document.getElementById('prod-main-photo-placeholder');
-      if (!imgEl || !phEl) return;
+      const img = document.getElementById('prod-main-photo-preview');
+      const ph = document.getElementById('prod-main-photo-placeholder');
+      currentProductImages = src ? [src] : [];
       if (src) {
-        imgEl.src = src;
-        imgEl.classList.remove('hidden');
-        phEl.classList.add('hidden');
+        img.src = src;
+        img.classList.remove('hidden');
+        ph.classList.add('hidden');
       } else {
-        imgEl.src = '';
-        imgEl.classList.add('hidden');
-        phEl.classList.remove('hidden');
+        img.src = '';
+        img.classList.add('hidden');
+        ph.classList.remove('hidden');
       }
     }
 
     async function handleMainProductPhotoUpload(event) {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
-      const compressed = await compressImageFile(file, 600, 0.75);
+      const compressed = await compressImageFile(file, 500, 0.72);
       if (compressed) {
-        currentProductImages[0] = compressed;
         setMainProductPhotoPreview(compressed);
       }
       event.target.value = '';
     }
 
-    async function handleVariantImageUpload(event, inputEl) {
+    async function handleVariantImageUpload(event, btnEl) {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
-      const compressed = await compressImageFile(file, 500, 0.72);
+      const row = btnEl.closest('.barcode-row');
+      if (!row) return;
+      const compressed = await compressImageFile(file, 450, 0.72);
       if (compressed) {
-        const row = inputEl.closest('.barcode-row');
-        if (row) {
-          row.dataset.variantImg = compressed;
-          const imgEl = row.querySelector('.var-img-preview');
-          const phEl = row.querySelector('.var-img-placeholder');
-          if (imgEl && phEl) {
-            imgEl.src = compressed;
-            imgEl.classList.remove('hidden');
-            phEl.classList.add('hidden');
-          }
+        row.dataset.variantImage = compressed;
+        const preview = row.querySelector('.bc-variant-img-preview');
+        const placeholder = row.querySelector('.bc-variant-img-placeholder');
+        if (preview) {
+          preview.src = compressed;
+          preview.classList.remove('hidden');
+        }
+        if (placeholder) placeholder.classList.add('hidden');
+        if (!currentProductImages.length) {
+          setMainProductPhotoPreview(compressed);
         }
       }
       event.target.value = '';
     }
 
-    function openProductModal(productId = null) {
-      const form = document.getElementById('form-product');
-      form.reset();
-      document.getElementById('prod-id').value = '';
-      document.getElementById('prod-buy-price').value = '';
-      document.getElementById('prod-sell-price').value = '';
-      document.getElementById('prod-pack-size').value = 12;
-      currentProductImages = [];
-      setMainProductPhotoPreview('');
-
-      const categories = [...new Set(appData.products.map(p => p.category).filter(Boolean))];
-      document.getElementById('category-datalist').innerHTML = categories.map(c => `<option value="${c}">`).join('');
-
-      const bcContainer = document.getElementById('barcode-rows-container');
-      bcContainer.innerHTML = '';
-
-      if (productId) {
-        const prod = appData.products.find(p => p.id === productId);
-        if (!prod) return;
-        document.getElementById('modal-product-title').textContent = "Edit Barang";
-        document.getElementById('prod-id').value = prod.id;
-        document.getElementById('prod-name').value = prod.name;
-        document.getElementById('prod-category').value = prod.category;
-        document.getElementById('prod-min-stock').value = prod.minStock ?? 5;
-        document.getElementById('prod-buy-price').value = prod.buyPrice ?? 0;
-        document.getElementById('prod-sell-price').value = prod.sellPrice ?? 0;
-        document.getElementById('prod-pack-size').value = prod.packSize || 12;
-
-        currentProductImages = [...(prod.images || [])];
-        if (currentProductImages[0] && !currentProductImages[0].includes('placehold.co')) {
-          setMainProductPhotoPreview(currentProductImages[0]);
-        }
-
-        const existingVariants = (prod.barcodes && prod.barcodes.length > 0)
-          ? prod.barcodes
-          : [{ code: '', variant: '', qty: prod.stock || 0, cartonQty: prod.cartonStock || 0, image: '' }];
-
-        existingVariants.forEach(b => {
-          addBarcodeRow(b.code || '', b.variant || '', b.qty ?? 0, b.cartonQty ?? 0, b.image || '', false);
-        });
-      } else {
-        document.getElementById('modal-product-title').textContent = "Tambah Barang";
-        addBarcodeRow('', '', 0, 0, '', false);
-      }
-
-      recalculateVariantTotals();
-      updatePricePreview();
-      openModal('modal-product');
-    }
-
-    function updatePricePreview() {
-      const buy = Number(document.getElementById('prod-buy-price').value) || 0;
-      const sell = Number(document.getElementById('prod-sell-price').value) || 0;
-      const packSize = Math.max(1, Number(document.getElementById('prod-pack-size')?.value) || 1);
-      document.getElementById('preview-buy-price').textContent = `Format: ${formatRupiah(buy)}`;
-      document.getElementById('preview-sell-price').textContent = `Format: ${formatRupiah(sell)}`;
-      const cartonInfoEl = document.getElementById('preview-carton-info');
-      if (cartonInfoEl) {
-        cartonInfoEl.textContent = `1 Karton = ${packSize} pcs (Harga 1 karton: ${formatRupiah(sell * packSize)})`;
-      }
-    }
-
-    function addBarcodeRow(code = '', variant = '', qty = 0, cartonQty = 0, variantImg = '', shouldRecalc = true) {
+    function addBarcodeRow(code = '', variant = '', qty = 0, cartonQty = 0, imgSrc = '', shouldRecalc = true) {
       const container = document.getElementById('barcode-rows-container');
-      const safePcs = Math.max(0, parseInt(qty, 10) || 0);
-      const safeCarton = Math.max(0, parseInt(cartonQty, 10) || 0);
-
+      if (!container) return;
       const row = document.createElement('div');
-      row.className = "p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200 shadow-sm space-y-3 barcode-row";
-      row.dataset.variantImg = variantImg || '';
+      row.className = 'barcode-row p-3.5 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-3';
+      row.dataset.variantImage = imgSrc || '';
 
       row.innerHTML = `
-        <div class="flex gap-3 items-start">
-          <!-- Preview Gambar Varian -->
-          <div class="w-20 h-20 rounded-xl bg-white border border-slate-200 overflow-hidden shrink-0 flex flex-col items-center justify-center relative">
-            <img src="${variantImg || ''}" alt="Foto Varian" class="var-img-preview ${variantImg ? '' : 'hidden'} w-full h-full object-cover">
-            <div class="var-img-placeholder ${variantImg ? 'hidden' : ''} flex flex-col items-center justify-center text-slate-400 text-center p-1">
-              ${icon('image', 'w-5 h-5')}
-              <span class="text-[9px] font-bold mt-1">Foto Varian</span>
-            </div>
+        <div class="flex items-start gap-3">
+          <label class="w-16 h-16 rounded-xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 cursor-pointer relative" title="Foto Varian">
+            <img src="${imgSrc || ''}" alt="Varian" class="bc-variant-img-preview ${imgSrc ? '' : 'hidden'} w-full h-full object-cover">
+            <span class="bc-variant-img-placeholder ${imgSrc ? 'hidden' : ''} text-slate-400">${icon('image', 'w-5 h-5')}</span>
+            <input type="file" accept="image/*" onchange="handleVariantImageUpload(event, this)" class="hidden">
+          </label>
+          <div class="flex-1 min-w-0">
+            <label class="block text-[11px] font-extrabold text-slate-700 mb-1">Warna / Varian</label>
+            <input type="text" value="${(variant || '').replace(/"/g, '&quot;')}" oninput="recalcVariantStockTotals()" placeholder="Contoh: Putih / Biru / Merah" class="bc-variant-input w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-navy-600">
           </div>
+          <button type="button" onclick="removeBarcodeRow(this)" title="Hapus Varian" class="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition shrink-0">
+            ${icon('trash', 'w-4 h-4')}
+          </button>
+        </div>
 
-          <!-- Input Warna/Varian + Stok per Pcs & Stok per Karton -->
-          <div class="flex-1 min-w-0 space-y-2.5">
-            <div class="flex items-start justify-between gap-2">
-              <div class="flex-1">
-                <label class="block text-[11px] font-extrabold text-slate-800 mb-1">Warna / Varian <span class="text-rose-500">*</span></label>
-                <input type="text" placeholder="Contoh: Putih / Biru / Original" value="${variant}" class="bc-variant-input w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-navy-600">
-              </div>
-              <button type="button" onclick="removeBarcodeRow(this)" title="Hapus Varian" class="mt-5 w-8 h-8 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 transition">
-                ${icon('trash', 'w-4 h-4')}
-              </button>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2.5">
-              <div>
-                <label class="block text-[11px] font-extrabold text-slate-800 mb-1">Stok per Pcs <span class="text-rose-500">*</span></label>
-                <div class="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-navy-600">
-                  <input type="number" min="0" value="${safePcs}" oninput="recalculateVariantTotals()" class="bc-qty-input w-full px-2.5 py-2 text-xs font-black text-center text-slate-900 focus:outline-none">
-                  <span class="px-2.5 py-2 bg-slate-100 text-slate-500 text-[11px] font-bold border-l border-slate-200">pcs</span>
-                </div>
-              </div>
-
-              <div>
-                <label class="block text-[11px] font-extrabold text-slate-800 mb-1">Stok per Karton <span class="text-rose-500">*</span></label>
-                <div class="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-navy-600">
-                  <input type="number" min="0" value="${safeCarton}" oninput="recalculateVariantTotals()" class="bc-carton-input w-full px-2.5 py-2 text-xs font-black text-center text-slate-900 focus:outline-none">
-                  <span class="px-2.5 py-2 bg-slate-100 text-slate-500 text-[11px] font-bold border-l border-slate-200">karton</span>
-                </div>
-              </div>
-            </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-[11px] font-extrabold text-slate-700 mb-1">Stok per Pcs</label>
+            <input type="number" min="0" value="${Number(qty) || 0}" oninput="recalcVariantStockTotals()" class="bc-pcs-input w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-navy-700 focus:outline-none focus:ring-2 focus:ring-navy-600">
+          </div>
+          <div>
+            <label class="block text-[11px] font-extrabold text-slate-700 mb-1">Stok per Karton</label>
+            <input type="number" min="0" value="${Number(cartonQty) || 0}" oninput="recalcVariantStockTotals()" class="bc-karton-input w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-navy-700 focus:outline-none focus:ring-2 focus:ring-navy-600">
           </div>
         </div>
 
-        <!-- Baris Barcode + Tombol Scan Kamera & Upload Gambar -->
-        <div class="flex items-end gap-2 pt-1 border-t border-slate-200/70">
-          <div class="flex-1 min-w-0">
-            <label class="flex items-center gap-1.5 text-[11px] font-extrabold text-navy-700 mb-1">
-              ${icon('barcode', 'w-3.5 h-3.5 text-navy-600')}
-              <span>Barcode</span>
-            </label>
-            <input type="text" placeholder="123456789012" value="${code}" class="bc-code-input w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-navy-600">
-          </div>
-
-          <button type="button" onclick="openCameraScanner('PRODUCT_ROW', this)" title="Scan Barcode dengan Kamera" class="px-3 py-2 rounded-xl bg-navy-50 hover:bg-navy-100 text-navy-700 border border-navy-200 flex flex-col items-center justify-center shrink-0 transition">
-            ${icon('camera', 'w-4 h-4')}
-            <span class="text-[10px] font-extrabold mt-0.5">Scan</span>
+        <div class="flex items-center gap-2">
+          <input type="text" value="${(code || '').replace(/"/g, '&quot;')}" placeholder="Kode barcode..." class="bc-code-input flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-navy-600">
+          <button type="button" onclick="openCameraScanner('PRODUCT_ROW', this)" class="px-3 py-2 bg-navy-600 hover:bg-navy-700 text-gold-400 rounded-xl text-xs font-extrabold flex items-center gap-1 shrink-0 transition">
+            ${icon('camera', 'w-3.5 h-3.5')}
+            <span>Scan</span>
           </button>
-
-          <label title="Upload Gambar Varian" class="px-3 py-2 rounded-xl bg-gold-50 hover:bg-gold-100 text-navy-900 border border-gold-300 flex flex-col items-center justify-center shrink-0 cursor-pointer transition">
-            ${icon('image', 'w-4 h-4')}
-            <span class="text-[10px] font-extrabold mt-0.5">Gambar</span>
+          <label class="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-extrabold flex items-center gap-1 cursor-pointer shrink-0 transition">
+            ${icon('image', 'w-3.5 h-3.5')}
+            <span>Gambar</span>
             <input type="file" accept="image/*" onchange="handleVariantImageUpload(event, this)" class="hidden">
           </label>
         </div>
       `;
 
       container.appendChild(row);
-      if (shouldRecalc) {
-        recalculateVariantTotals();
-      }
+      if (shouldRecalc) recalcVariantStockTotals();
     }
 
     function removeBarcodeRow(btn) {
       const container = document.getElementById('barcode-rows-container');
-      const rows = container.querySelectorAll('.barcode-row');
-      if (rows.length <= 1) {
-        showToast("Minimal harus terdapat 1 varian barang.", "warning");
-        return;
-      }
       const row = btn.closest('.barcode-row');
-      if (row) row.remove();
-      recalculateVariantTotals();
+      if (!container || !row) return;
+      if (container.querySelectorAll('.barcode-row').length <= 1) {
+        row.querySelector('.bc-variant-input').value = '';
+        row.querySelector('.bc-code-input').value = '';
+        row.querySelector('.bc-pcs-input').value = 0;
+        row.querySelector('.bc-karton-input').value = 0;
+      } else {
+        row.remove();
+      }
+      recalcVariantStockTotals();
+    }
+
+    function recalcVariantStockTotals() {
+      const pcsVals = [];
+      const ktnVals = [];
+      document.querySelectorAll('#barcode-rows-container .barcode-row').forEach(row => {
+        const p = Math.max(0, Number(row.querySelector('.bc-pcs-input')?.value) || 0);
+        const k = Math.max(0, Number(row.querySelector('.bc-karton-input')?.value) || 0);
+        pcsVals.push(p);
+        ktnVals.push(k);
+      });
+
+      const totalPcs = pcsVals.reduce((a, b) => a + b, 0);
+      const totalKtn = ktnVals.reduce((a, b) => a + b, 0);
+
+      const totPcsEl = document.getElementById('summary-total-pcs');
+      const brkPcsEl = document.getElementById('summary-breakdown-pcs');
+      const totKtnEl = document.getElementById('summary-total-karton');
+      const brkKtnEl = document.getElementById('summary-breakdown-karton');
+      const hidPcs = document.getElementById('prod-stock');
+      const hidKtn = document.getElementById('prod-carton-stock');
+
+      if (totPcsEl) totPcsEl.textContent = totalPcs;
+      if (brkPcsEl) brkPcsEl.textContent = `(${pcsVals.join(' + ') || '0'})`;
+      if (totKtnEl) totKtnEl.textContent = totalKtn;
+      if (brkKtnEl) brkKtnEl.textContent = `(${ktnVals.join(' + ') || '0'})`;
+      if (hidPcs) hidPcs.value = totalPcs;
+      if (hidKtn) hidKtn.value = totalKtn;
+    }
+
+    function updatePricePreview() {
+      const buy = Number(document.getElementById('prod-buy-price')?.value) || 0;
+      const sell = Number(document.getElementById('prod-sell-price')?.value) || 0;
+      const pack = Math.max(1, Number(document.getElementById('prod-pack-size')?.value) || 24);
+
+      const buyEl = document.getElementById('preview-buy-price');
+      const sellEl = document.getElementById('preview-sell-price');
+      const ktnEl = document.getElementById('preview-carton-info');
+
+      if (buyEl) buyEl.textContent = `Format: ${formatRupiah(buy)}`;
+      if (sellEl) sellEl.textContent = `Format: ${formatRupiah(sell)}`;
+      if (ktnEl) ktnEl.textContent = `1 Karton = ${pack} pcs (Harga 1 karton: ${formatRupiah(sell * pack)})`;
+    }
+
+    function openProductModal(productId = null) {
+      refreshCategoryDatalist();
+      const form = document.getElementById('form-product');
+      form.reset();
+      document.getElementById('prod-id').value = '';
+      document.getElementById('prod-pack-size').value = 24;
+      document.getElementById('barcode-rows-container').innerHTML = '';
+
+      if (productId) {
+        const prod = (appData.products || []).find(p => p.id === productId);
+        if (!prod) return;
+        document.getElementById('modal-product-title').textContent = "Edit Barang";
+        document.getElementById('prod-id').value = prod.id;
+        document.getElementById('prod-name').value = prod.name || '';
+        document.getElementById('prod-category').value = prod.category || '';
+        document.getElementById('prod-buy-price').value = prod.buyPrice || 0;
+        document.getElementById('prod-sell-price').value = prod.sellPrice || 0;
+        document.getElementById('prod-pack-size').value = prod.packSize || 24;
+        document.getElementById('prod-min-stock').value = prod.minStock || 5;
+
+        const mainPhoto = (prod.images && prod.images[0]) ? prod.images[0] : '';
+        setMainProductPhotoPreview(mainPhoto);
+
+        const barcodes = prod.barcodes && prod.barcodes.length > 0
+          ? prod.barcodes
+          : [{ code: '', variant: '', qty: prod.stock || 0, cartonQty: prod.cartonStock || 0, image: '' }];
+
+        barcodes.forEach(b => {
+          addBarcodeRow(b.code || '', b.variant || '', b.qty || 0, b.cartonQty || 0, b.image || '', false);
+        });
+      } else {
+        document.getElementById('modal-product-title').textContent = "Tambah Barang";
+        setMainProductPhotoPreview('');
+        addBarcodeRow('', '', 0, 0, '', false);
+      }
+
+      recalcVariantStockTotals();
+      updatePricePreview();
+      openModal('modal-product');
     }
 
     document.getElementById('form-product').addEventListener('submit', (e) => {
       e.preventDefault();
+      recalcVariantStockTotals();
+
       const id = document.getElementById('prod-id').value;
       const name = document.getElementById('prod-name').value.trim();
       const category = document.getElementById('prod-category').value.trim() || 'Umum';
-      const minStock = Math.max(0, Number(document.getElementById('prod-min-stock').value) || 5);
       const buyPrice = Math.max(0, Number(document.getElementById('prod-buy-price').value) || 0);
       const sellPrice = Math.max(0, Number(document.getElementById('prod-sell-price').value) || 0);
-      const packSize = Math.max(1, Number(document.getElementById('prod-pack-size').value) || 12);
+      const packSize = Math.max(1, Number(document.getElementById('prod-pack-size').value) || 24);
+      const minStock = Math.max(0, Number(document.getElementById('prod-min-stock').value) || 5);
 
-      const barcodes = [];
-      const collectedImages = [];
-
-      if (currentProductImages[0] && !currentProductImages[0].includes('placehold.co')) {
-        collectedImages.push(currentProductImages[0]);
+      if (!name) {
+        showToast("Nama barang wajib diisi!", "error");
+        return;
       }
 
-      document.querySelectorAll('#barcode-rows-container .barcode-row').forEach((row) => {
-        const code = (row.querySelector('.bc-code-input')?.value || '').trim();
+      const barcodes = [];
+      const variantImages = [];
+      let totalPcs = 0;
+      let totalKarton = 0;
+
+      document.querySelectorAll('#barcode-rows-container .barcode-row').forEach(row => {
         const variant = (row.querySelector('.bc-variant-input')?.value || '').trim();
-        const qty = Math.max(0, parseInt(row.querySelector('.bc-qty-input')?.value, 10) || 0);
-        const cartonQty = Math.max(0, parseInt(row.querySelector('.bc-carton-input')?.value, 10) || 0);
-        const variantImg = (row.dataset.variantImg || '').trim();
+        const code = (row.querySelector('.bc-code-input')?.value || '').trim();
+        const qty = Math.max(0, Number(row.querySelector('.bc-pcs-input')?.value) || 0);
+        const cartonQty = Math.max(0, Number(row.querySelector('.bc-karton-input')?.value) || 0);
+        const img = row.dataset.variantImage || '';
 
-        if (variantImg && !collectedImages.includes(variantImg)) {
-          collectedImages.push(variantImg);
-        }
+        totalPcs += qty;
+        totalKarton += cartonQty;
+        if (img) variantImages.push(img);
 
-        if (code || variant || qty > 0 || cartonQty > 0 || variantImg) {
-          barcodes.push({
-            code,
-            variant,
-            qty,
-            cartonQty,
-            image: variantImg
-          });
+        if (variant || code || qty > 0 || cartonQty > 0 || img) {
+          barcodes.push({ code, variant, qty, cartonQty, image: img });
         }
       });
 
-      const { totalPcs, totalKarton } = recalculateVariantTotals();
-
-      const images = collectedImages.length > 0
-        ? collectedImages
-        : [`https://placehold.co/400x400/fef3c7/002366?text=${encodeURIComponent(name.substring(0, 15))}`];
-
-      const today = new Date().toISOString().split('T')[0];
+      const collectedImages = [];
+      if (currentProductImages[0]) collectedImages.push(currentProductImages[0]);
+      variantImages.forEach(img => {
+        if (img && !collectedImages.includes(img)) collectedImages.push(img);
+      });
+      if (collectedImages.length === 0) {
+        collectedImages.push(`https://placehold.co/400x400/eef2ff/002366?text=${encodeURIComponent(name)}`);
+      }
 
       if (id) {
-        const idx = appData.products.findIndex(p => p.id === id);
+        const idx = (appData.products || []).findIndex(p => p.id === id);
         if (idx !== -1) {
-          const oldStock = Number(appData.products[idx].stock) || 0;
-          const addedStock = totalPcs - oldStock;
-
           appData.products[idx] = {
             ...appData.products[idx],
             name,
             category,
-            stock: totalPcs,
-            cartonStock: totalKarton,
-            minStock,
             buyPrice,
             sellPrice,
             packSize,
+            minStock,
+            stock: totalPcs,
+            cartonStock: totalKarton,
             barcodes,
-            images
+            images: collectedImages
           };
-
-          if (addedStock > 0 && buyPrice > 0) {
-            appData.financeLogs.unshift({
-              id: `FIN-${Date.now()}`,
-              date: today,
-              type: 'OUT',
-              category: 'Pembelian Stok',
-              description: `Restock ${name} (+${addedStock} pcs)`,
-              amount: addedStock * buyPrice,
-              isAuto: true
-            });
-          }
           showToast("Barang berhasil diperbarui!", "success");
         }
       } else {
-        const newProd = {
+        appData.products.unshift({
           id: `PROD-${Date.now()}`,
           name,
           category,
-          stock: totalPcs,
-          cartonStock: totalKarton,
-          minStock,
           buyPrice,
           sellPrice,
           packSize,
+          minStock,
+          stock: totalPcs,
+          cartonStock: totalKarton,
           barcodes,
-          images
-        };
-        appData.products.unshift(newProd);
-
-        if (totalPcs > 0 && buyPrice > 0) {
-          appData.financeLogs.unshift({
-            id: `FIN-${Date.now()}`,
-            date: today,
-            type: 'OUT',
-            category: 'Pembelian Stok',
-            description: `Stok Barang Baru: ${name} (${totalPcs} pcs, ${totalKarton} karton)`,
-            amount: totalPcs * buyPrice,
-            isAuto: true
-          });
-        }
-        showToast(`Barang disimpan (${totalPcs} pcs & ${totalKarton} karton)!`, "success");
+          images: collectedImages
+        });
+        showToast("Barang baru berhasil ditambahkan!", "success");
       }
 
       saveAppData();
@@ -3306,17 +3311,6 @@
       renderPosCategories();
       renderPosCatalog();
     });
-
-    function deleteProduct(productId) {
-      const prod = appData.products.find(p => p.id === productId);
-      if (!prod) return;
-      customConfirm("Hapus Produk", `Yakin ingin menghapus produk "${prod.name}" dari daftar barang?`, () => {
-        appData.products = appData.products.filter(p => p.id !== productId);
-        saveAppData();
-        renderProductList();
-        showToast("Produk berhasil dihapus.", "info");
-      });
-    }
 
     // ==================== 10. MENU 3: KEUANGAN & HUTANG ====================
     function switchFinanceSubTab(subTab) {
