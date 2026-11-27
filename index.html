@@ -199,7 +199,7 @@
           </button>
           <button type="button" onclick="clearLoginForm()" class="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition">
             <span id="qf-staff-icon"></span>
-            <span>Bersihkan Form</span>
+            <span>Pegawai</span>
           </button>
         </div>
 
@@ -1361,6 +1361,52 @@
   </div>
 
   <!-- ==================== JAVASCRIPT LOGIC ==================== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'vees-shop-pos';
+    const rawConfig = typeof __firebase_config !== 'undefined' ? __firebase_config : '';
+
+    async function setupFirebaseCloudBridge() {
+      try {
+        if (!rawConfig) {
+          if (typeof window.setCloudNotReadyStatus === 'function') {
+            window.setCloudNotReadyStatus('Konfigurasi cloud belum tersedia di lingkungan ini.');
+          }
+          return;
+        }
+
+        const firebaseConfig = JSON.parse(rawConfig);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+
+        const user = auth.currentUser;
+        if (!user) {
+          throw new Error('Autentikasi cloud gagal');
+        }
+
+        if (typeof window.attachCloudSession === 'function') {
+          window.attachCloudSession(db, user, appId, { doc, getDoc, setDoc, onSnapshot });
+        }
+      } catch (err) {
+        console.error('Gagal menginisialisasi koneksi cloud:', err);
+        if (typeof window.setCloudNotReadyStatus === 'function') {
+          window.setCloudNotReadyStatus('Koneksi cloud gagal diinisialisasi.');
+        }
+      }
+    }
+
+    setupFirebaseCloudBridge();
+  </script>
   <script>
     // ==================== 1. PURE INLINE SVG ICON HELPER ====================
     const SVG_ICONS = {
@@ -1566,14 +1612,52 @@
     let cloudDb = null;
     let cloudUser = null;
     let cloudSyncReady = false;
+    let cloudAppId = 'vees-shop-pos';
     let isApplyingRemoteSnapshot = false;
     let cloudSaveTimer = null;
     let unsubscribeCloudListener = null;
     let currentSyncRoom = getInitialSyncRoom();
 
-    function initCloudRealtimeSync() {
+    function getCloudRoomDocRef() {
+      if (!cloudDb || !window._firestoreOps || !window._firestoreOps.doc) return null;
+      const safeRoom = (currentSyncRoom || 'VEES-SHOP-MAIN').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || 'VEES-SHOP-MAIN';
+      return window._firestoreOps.doc(cloudDb, 'artifacts', cloudAppId, 'public', 'data', 'store_sync_rooms', safeRoom);
+    }
+
+    function setCloudNotReadyStatus(reasonMsg = '') {
+      cloudSyncReady = false;
+      updateSyncStatusBadge('offline', 'Lokal Saja');
+      const modalStatus = document.getElementById('sync-modal-status');
+      if (modalStatus) {
+        modalStatus.textContent = reasonMsg
+          ? `Status: Lokal Saja — ${reasonMsg}`
+          : `Status: Lokal Saja (Ruang: ${currentSyncRoom})`;
+      }
+    }
+
+    function attachCloudSession(db, user, appId, firestoreFns) {
+      cloudDb = db;
+      cloudUser = user;
+      cloudAppId = appId || 'vees-shop-pos';
+      cloudSyncReady = Boolean(cloudDb && cloudUser && firestoreFns);
+      window._firestoreOps = {
+        ...firestoreFns,
+        docRef: getCloudRoomDocRef()
+      };
       updateSyncStatusBadge('online', 'Sync Aktif');
       bindCloudRoomListener();
+    }
+
+    window.setCloudNotReadyStatus = setCloudNotReadyStatus;
+    window.attachCloudSession = attachCloudSession;
+
+    function initCloudRealtimeSync() {
+      if (cloudDb && cloudUser && window._firestoreOps) {
+        updateSyncStatusBadge('online', 'Sync Aktif');
+        bindCloudRoomListener();
+      } else {
+        updateSyncStatusBadge('syncing', 'Menghubungkan...');
+      }
     }
 
     function bindCloudRoomListener() {
@@ -1584,37 +1668,40 @@
         unsubscribeCloudListener = null;
       }
 
-      if (!cloudDb || !cloudUser || !window._firestoreOps) {
-        updateSyncStatusBadge('online', 'Sync Aktif');
+      const roomDocRef = getCloudRoomDocRef();
+      if (!cloudDb || !cloudUser || !roomDocRef || !window._firestoreOps || typeof window._firestoreOps.onSnapshot !== 'function') {
+        setCloudNotReadyStatus();
         return;
       }
 
+      window._firestoreOps.docRef = roomDocRef;
+
       try {
-        const { docRef, onSnapshot } = window._firestoreOps;
-        if (docRef && typeof onSnapshot === 'function') {
-          unsubscribeCloudListener = onSnapshot(docRef, (snap) => {
-            if (!snap.exists()) return;
-            const data = snap.data();
-            if (!data || !data.payload) return;
-            try {
-              isApplyingRemoteSnapshot = true;
-              appData = applyNormalizedAppData(JSON.parse(data.payload));
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
-              refreshAllVisibleViews();
-              updateSyncStatusBadge('online', 'Sync Aktif');
-            } catch (parseErr) {
-              console.error('Gagal menerapkan snapshot cloud:', parseErr);
-            } finally {
-              isApplyingRemoteSnapshot = false;
-            }
-          }, (err) => {
-            console.error('Error listener cloud:', err);
-            updateSyncStatusBadge('offline', 'Offline');
-          });
-        }
+        unsubscribeCloudListener = window._firestoreOps.onSnapshot(roomDocRef, (snap) => {
+          if (!snap.exists()) {
+            updateSyncStatusBadge('online', 'Sync Aktif');
+            return;
+          }
+          const data = snap.data();
+          if (!data || !data.payload) return;
+          try {
+            isApplyingRemoteSnapshot = true;
+            appData = applyNormalizedAppData(JSON.parse(data.payload));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+            refreshAllVisibleViews();
+            updateSyncStatusBadge('online', 'Sync Aktif');
+          } catch (parseErr) {
+            console.error('Gagal menerapkan snapshot cloud:', parseErr);
+          } finally {
+            isApplyingRemoteSnapshot = false;
+          }
+        }, (err) => {
+          console.error('Error listener cloud:', err);
+          setCloudNotReadyStatus('Koneksi terputus.');
+        });
       } catch (err) {
         console.error('Gagal mengikat listener ruang toko:', err);
-        updateSyncStatusBadge('offline', 'Offline');
+        setCloudNotReadyStatus('Gagal mendengarkan perubahan.');
       }
     }
 
@@ -1689,14 +1776,14 @@
     }
 
     async function forcePushToCloud() {
-      if (!cloudDb || !cloudUser || !window._firestoreOps) {
+      const roomDocRef = getCloudRoomDocRef();
+      if (!cloudDb || !cloudUser || !roomDocRef || !window._firestoreOps || typeof window._firestoreOps.setDoc !== 'function') {
         showToast("Koneksi cloud belum siap.", "warning");
         return;
       }
       try {
         updateSyncStatusBadge('syncing', 'Mengirim...');
-        const { docRef, setDoc } = window._firestoreOps;
-        await setDoc(docRef, {
+        await window._firestoreOps.setDoc(roomDocRef, {
           payload: JSON.stringify(appData),
           updatedAt: new Date().toISOString(),
           updatedBy: currentUser ? currentUser.name : 'ManualPush'
@@ -1704,20 +1791,20 @@
         updateSyncStatusBadge('online', 'Sync Aktif');
         showToast("Data HP ini berhasil dikirim ke semua perangkat!", "success");
       } catch (e) {
-        updateSyncStatusBadge('offline', 'Gagal Sync');
+        setCloudNotReadyStatus('Gagal mengirim data.');
         showToast("Gagal mengirim data ke cloud.", "error");
       }
     }
 
     async function forcePullFromCloud() {
-      if (!cloudDb || !cloudUser || !window._firestoreOps) {
+      const roomDocRef = getCloudRoomDocRef();
+      if (!cloudDb || !cloudUser || !roomDocRef || !window._firestoreOps || typeof window._firestoreOps.getDoc !== 'function') {
         showToast("Koneksi cloud belum siap.", "warning");
         return;
       }
       try {
         updateSyncStatusBadge('syncing', 'Mengambil...');
-        const { docRef, getDoc } = window._firestoreOps;
-        const snap = await getDoc(docRef);
+        const snap = await window._firestoreOps.getDoc(roomDocRef);
         if (snap.exists() && snap.data().payload) {
           isApplyingRemoteSnapshot = true;
           appData = applyNormalizedAppData(JSON.parse(snap.data().payload));
@@ -1731,7 +1818,7 @@
           showToast("Belum ada data tersimpan di ruang toko ini.", "info");
         }
       } catch (e) {
-        updateSyncStatusBadge('offline', 'Gagal Sync');
+        setCloudNotReadyStatus('Gagal mengambil data.');
         showToast("Gagal mengambil data dari cloud.", "error");
       }
     }
@@ -1793,13 +1880,13 @@
     }
 
     function scheduleCloudPush(data) {
-      if (!cloudDb || !cloudUser || !window._firestoreOps) return;
+      const roomDocRef = getCloudRoomDocRef();
+      if (!cloudDb || !cloudUser || !roomDocRef || !window._firestoreOps || typeof window._firestoreOps.setDoc !== 'function') return;
       updateSyncStatusBadge('syncing', 'Menyimpan...');
       clearTimeout(cloudSaveTimer);
       cloudSaveTimer = setTimeout(async () => {
         try {
-          const { docRef, setDoc } = window._firestoreOps;
-          await setDoc(docRef, {
+          await window._firestoreOps.setDoc(roomDocRef, {
             payload: JSON.stringify(data),
             updatedAt: new Date().toISOString(),
             updatedBy: currentUser ? currentUser.name : 'System'
@@ -1807,7 +1894,7 @@
           updateSyncStatusBadge('online', 'Sync Aktif');
         } catch (err) {
           console.error("Gagal sinkronisasi ke cloud:", err);
-          updateSyncStatusBadge('offline', 'Offline');
+          setCloudNotReadyStatus('Gagal menyimpan perubahan.');
         }
       }, 250);
     }
